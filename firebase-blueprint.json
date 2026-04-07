@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the Sling app.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "An anonymous message sent to a user.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "recipientUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "emoji": { "type": "string" }
+      },
+      "required": ["text", "recipientUid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data."
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Anonymous messages."
+    },
+    "/usernames/{username}": {
+      "schema": { "type": "object", "properties": { "uid": { "type": "string" } } },
+      "description": "Mapping of usernames to UIDs to ensure uniqueness."
+    }
+  }
+}

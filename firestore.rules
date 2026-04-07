@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (auth.uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - username: string (required, unique, 3-20 chars)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: messages
+    // Document ID: auto-generated
+    // Fields:
+    //   - text: string (required, 1-500 chars)
+    //   - recipientUid: string (required)
+    //   - createdAt: timestamp (required)
+    //   - emoji: string (optional, max 10 chars)
+    //
+    // Collection: usernames
+    // Document ID: username
+    // Fields:
+    //   - uid: string (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'username']) &&
+             data.uid == request.auth.uid &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 20 &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('photoURL' in data) || (data.photoURL is string || data.photoURL == null || data.photoURL.size() < 2000));
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['text', 'recipientUid', 'createdAt']) &&
+             data.text is string && data.text.size() >= 0 && data.text.size() <= 5000000 &&
+             data.recipientUid is string &&
+             data.createdAt is timestamp &&
+             (!('emoji' in data) || (data.emoji is string || data.emoji == null)) &&
+             (!('voiceData' in data) || (data.voiceData is string || data.voiceData == null)) &&
+             (!('mediaData' in data) || (data.mediaData is string || data.mediaData == null)) &&
+             (!('mediaType' in data) || (data.mediaType is string || data.mediaType == null)) &&
+             (!('senderUid' in data) || (data.senderUid is string || data.senderUid == null)) &&
+             (!('senderName' in data) || (data.senderName is string || data.senderName == null)) &&
+             (!('deviceInfo' in data) || (data.deviceInfo is string || data.deviceInfo == null)) &&
+             (!('mode' in data) || (data.mode is string || data.mode == null)) &&
+             (!('expiresAt' in data) || (data.expiresAt is timestamp || data.expiresAt == null));
+    }
+
+    // Rules
+    match /users/{userId} {
+      // Users can only read their own profile or others' profiles to verify existence
+      allow read: if isAuthenticated();
+      // Users can only create/update their own profile
+      allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /usernames/{username} {
+      // Anyone can read to check if a username exists
+      allow read: if true;
+      // Only authenticated users can reserve their own username
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      // Usernames are immutable once created
+      allow update, delete: if false;
+    }
+
+    match /messages/{messageId} {
+      // Only the recipient can read, delete, or update (for reactions) their messages
+      allow read, delete, update: if isAuthenticated() && resource.data.recipientUid == request.auth.uid;
+      // Anyone can send a message as long as it's valid
+      allow create: if isValidMessage(request.resource.data);
+    }
+  }
+}
