@@ -74,6 +74,7 @@ export default function Dashboard() {
 
   // DP Update state
   const [updatingDP, setUpdatingDP] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
@@ -296,6 +297,33 @@ export default function Dashboard() {
 
   const logout = () => auth.signOut();
 
+  const updateAvatarStyle = async (style: 'boy' | 'girl' | 'neutral') => {
+    if (!user || !username) return;
+    setUpdatingDP(true);
+    try {
+      let avatarStyle = 'avataaars';
+      if (style === 'boy') avatarStyle = 'micah';
+      if (style === 'girl') avatarStyle = 'lorelei';
+      
+      const newPhotoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${username.toLowerCase()}`;
+      
+      await setDoc(doc(db, 'users', user.uid), {
+        photoURL: newPhotoURL,
+        avatarType: style
+      }, { merge: true });
+      
+      localStorage.setItem('sling_photo', newPhotoURL);
+      await refreshUser();
+      showToast('Avatar style updated!', 'success');
+      setShowAvatarPicker(false);
+    } catch (err: any) {
+      console.error('Avatar Update Error:', err);
+      showToast('Failed to update avatar style', 'error');
+    } finally {
+      setUpdatingDP(false);
+    }
+  };
+
   const reactToMessage = async (msgId: string, emoji: string) => {
     try {
       const msgRef = doc(db, 'messages', msgId);
@@ -483,23 +511,41 @@ export default function Dashboard() {
                 
                 <div className="flex flex-col items-center text-center relative z-10">
                   <div className="relative group mb-4">
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-2 border-white/10 flex items-center justify-center overflow-hidden">
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-2 border-white/10 flex items-center justify-center overflow-hidden relative group">
                       {photoURL ? (
                         <img src={photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
                         <span className="text-4xl font-bold gradient-text">@{username?.charAt(0)?.toUpperCase() || '?'}</span>
                       )}
+                      
+                      {/* Avatar Style Picker Overlay */}
+                      <AnimatePresence>
+                        {showAvatarPicker && (
+                          <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-2 gap-2"
+                          >
+                            <button onClick={() => updateAvatarStyle('boy')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👦 Boy</button>
+                            <button onClick={() => updateAvatarStyle('girl')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👧 Girl</button>
+                            <button onClick={() => updateAvatarStyle('neutral')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👤 Neutral</button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
                       {updatingDP && (
                         <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
                           <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1" />
-                          <span className="text-[10px] font-bold text-white">{uploadProgress}%</span>
                         </div>
                       )}
                     </div>
-                    <label className="absolute bottom-0 right-0 p-2 bg-purple-600 rounded-full text-white cursor-pointer shadow-lg hover:scale-110 transition-all">
-                      <Camera className="w-4 h-4" />
-                      <input type="file" accept="image/*" className="hidden" onChange={handleDPUpdate} disabled={updatingDP} />
-                    </label>
+                    <button 
+                      onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+                      className="absolute bottom-0 right-0 p-2 bg-purple-600 rounded-full text-white cursor-pointer shadow-lg hover:scale-110 transition-all z-20"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
                   </div>
                   <h2 className="text-2xl font-bold mb-1">@{username}</h2>
                   <p className="text-gray-400 mb-8">Share your link to get messages!</p>

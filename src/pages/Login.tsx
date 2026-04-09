@@ -19,6 +19,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const [isLogin, setIsLogin] = useState(isLoginMode);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [gender, setGender] = useState<'boy' | 'girl' | 'neutral'>('neutral');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [profilePic, setProfilePic] = useState<File | null>(null);
@@ -76,14 +77,19 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
         const { user } = await createUserWithEmailAndPassword(auth, email, password);
         
-        // Create user profile with automatic DiceBear avatar
-        const photoURL = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username.toLowerCase()}`;
+        // Create user profile with automatic DiceBear avatar based on gender
+        let avatarStyle = 'avataaars';
+        if (gender === 'boy') avatarStyle = 'micah';
+        if (gender === 'girl') avatarStyle = 'lorelei';
+        
+        const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${username.toLowerCase()}`;
         
         console.log('Updating Database');
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           username: username.toLowerCase(),
           photoURL,
+          avatarType: gender,
           createdAt: new Date()
         });
         console.log('Database Updated');
@@ -160,14 +166,39 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             </div>
 
             {!isLogin && (
-              <div className="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 mb-2">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl font-bold text-white">
-                  {username ? username[0].toUpperCase() : '?'}
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-gray-400">
-                    A unique avatar will be generated automatically for your username!
-                  </p>
+              <div className="space-y-4 mb-4">
+                <div className="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden border-2 border-white/10">
+                    <img 
+                      src={`https://api.dicebear.com/7.x/${gender === 'boy' ? 'micah' : gender === 'girl' ? 'lorelei' : 'avataaars'}/svg?seed=${username || 'preview'}`} 
+                      alt="Avatar Preview" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Choose your style</p>
+                  
+                  <div className="flex gap-2 w-full">
+                    {[
+                      { id: 'boy', label: 'Boy', icon: '👦' },
+                      { id: 'girl', label: 'Girl', icon: '👧' },
+                      { id: 'neutral', label: 'Neutral', icon: '👤' }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setGender(opt.id as any)}
+                        className={cn(
+                          "flex-1 py-2 rounded-xl text-xs font-bold transition-all border",
+                          gender === opt.id 
+                            ? "bg-purple-500/20 border-purple-500 text-white" 
+                            : "bg-white/5 border-white/10 text-gray-500 hover:text-gray-300"
+                        )}
+                      >
+                        <span className="mr-1">{opt.icon}</span>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

@@ -41,6 +41,7 @@ service cloud.firestore {
              data.uid == request.auth.uid &&
              data.username is string && data.username.size() >= 3 && data.username.size() <= 20 &&
              (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('avatarType' in data) || (data.avatarType is string)) &&
              (!('photoURL' in data) || (data.photoURL is string || data.photoURL == null || data.photoURL.size() < 2000));
     }
 
