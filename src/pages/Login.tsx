@@ -58,7 +58,15 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     setLoading(true);
     setError('');
 
-    const email = formatEmail(username);
+    const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
+    
+    if (sanitizedUsername.length < 3) {
+      setError('Username must be at least 3 characters (alphanumeric only)');
+      setLoading(false);
+      return;
+    }
+
+    const email = formatEmail(sanitizedUsername);
 
     try {
       if (isLogin) {
@@ -68,7 +76,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       } else {
         // Sign Up
         // Check if username is taken in Firestore first
-        const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()));
+        const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
         if (usernameDoc.exists()) {
           setError('Username is already taken');
           setLoading(false);
@@ -82,12 +90,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         if (gender === 'boy') avatarStyle = 'micah';
         if (gender === 'girl') avatarStyle = 'lorelei';
         
-        const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${username.toLowerCase()}`;
+        const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
         
         console.log('Updating Database');
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
-          username: username.toLowerCase(),
+          username: sanitizedUsername,
           photoURL,
           avatarType: gender,
           createdAt: new Date()
@@ -95,7 +103,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         console.log('Database Updated');
 
         // Reserve username
-        await setDoc(doc(db, 'usernames', username.toLowerCase()), {
+        await setDoc(doc(db, 'usernames', sanitizedUsername), {
           uid: user.uid
         });
       }
@@ -157,8 +165,9 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                  onChange={(e) => setUsername(e.target.value)}
                   placeholder="yourname"
+                  maxLength={20}
                   className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                   disabled={loading}
                 />
