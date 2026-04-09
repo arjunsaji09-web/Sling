@@ -76,30 +76,9 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
         const { user } = await createUserWithEmailAndPassword(auth, email, password);
         
-        let photoURL = null;
-        if (profilePic) {
-          try {
-            console.log('Starting Upload for UID:', user.uid);
-            const storageRef = ref(storage, `profiles/${user.uid}`);
-            
-            // Use simple uploadBytes for better compatibility on some browsers
-            const uploadResult = await uploadBytes(storageRef, profilePic);
-            console.log('Upload Result:', uploadResult);
-            
-            photoURL = await getDownloadURL(storageRef);
-            console.log('URL Retrieved:', photoURL);
-          } catch (storageErr: any) {
-            console.error('Detailed Storage Error:', storageErr);
-            let errorMessage = 'Profile picture upload failed. You can still sign up and add it later.';
-            if (storageErr.code === 'storage/unauthorized') {
-              errorMessage = 'Firebase Storage Permission Denied. Please ensure Storage is "Started" in the Firebase Console.';
-            }
-            setError(errorMessage);
-            // We don't return here so the user can still sign up even if DP fails
-          }
-        }
-
-        // Create user profile
+        // Create user profile with automatic DiceBear avatar
+        const photoURL = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username.toLowerCase()}`;
+        
         console.log('Updating Database');
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
@@ -181,39 +160,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             </div>
 
             {!isLogin && (
-              <div className="space-y-3">
-                <label className="block text-xs font-medium text-gray-500 ml-1 uppercase tracking-wider">
-                  Profile Picture (Optional)
-                </label>
-                <div className="flex items-center gap-4">
-                  <div className="relative group">
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 overflow-hidden flex items-center justify-center">
-                      {profilePicPreview ? (
-                        <img src={profilePicPreview} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <UserIcon className="w-6 h-6 text-gray-600" />
-                      )}
-                    </div>
-                    {profilePicPreview && (
-                      <button
-                        type="button"
-                        onClick={() => { setProfilePic(null); setProfilePicPreview(null); }}
-                        className="absolute -top-2 -right-2 p-1 bg-red-500 rounded-full text-white shadow-lg"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <label className="cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 p-3 rounded-xl transition-all">
-                      <ImageIcon className="w-5 h-5 text-purple-400" />
-                      <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-                    </label>
-                    <label className="cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 p-3 rounded-xl transition-all">
-                      <Camera className="w-5 h-5 text-pink-400" />
-                      <input type="file" accept="image/*" capture="user" className="hidden" onChange={handleFileChange} />
-                    </label>
-                  </div>
+              <div className="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 mb-2">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl font-bold text-white">
+                  {username ? username[0].toUpperCase() : '?'}
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-400">
+                    A unique avatar will be generated automatically for your username!
+                  </p>
                 </div>
               </div>
             )}
