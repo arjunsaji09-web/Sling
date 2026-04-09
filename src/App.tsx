@@ -6,7 +6,7 @@ import { auth, db } from './lib/firebase';
 import Login from './pages/Login';
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Profile = React.lazy(() => import('./pages/Profile'));
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 
 interface AuthContextType {
   user: User | null;
@@ -90,12 +90,7 @@ export default function App() {
 
   const fetchUserProfile = async (currentUser: User) => {
     try {
-      const userDocPromise = getDoc(doc(db, 'users', currentUser.uid));
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout fetching user profile')), 8000)
-      );
-      
-      const userDoc = await Promise.race([userDocPromise, timeoutPromise]) as any;
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       
       if (userDoc.exists()) {
         const data = userDoc.data();
@@ -108,20 +103,9 @@ export default function App() {
         localStorage.setItem('sling_username', name);
         if (photo) localStorage.setItem('sling_photo', photo);
         else localStorage.removeItem('sling_photo');
-      } else {
-        console.warn('User document not found for UID:', currentUser.uid);
-        const cachedUsername = localStorage.getItem('sling_username');
-        if (cachedUsername) {
-          setUsername(cachedUsername);
-        } else {
-          setUsername(null);
-        }
-        setPhotoURL(null);
       }
     } catch (err) {
       console.error('Error fetching user document:', err);
-      const cachedUsername = localStorage.getItem('sling_username');
-      if (cachedUsername) setUsername(cachedUsername);
     }
   };
 
@@ -138,16 +122,19 @@ export default function App() {
     if (cachedUsername) setUsername(cachedUsername);
     if (cachedPhoto) setPhotoURL(cachedPhoto);
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       if (user) {
-        await fetchUserProfile(user);
+        // Start fetching fresh data in background
+        fetchUserProfile(user);
       } else {
         setUsername(null);
         setPhotoURL(null);
         localStorage.removeItem('sling_username');
         localStorage.removeItem('sling_photo');
+        localStorage.removeItem('sling_messages'); // Clear messages on logout
       }
+      // Set loading to false as soon as we know the auth state
       setLoading(false);
     });
 
@@ -187,11 +174,31 @@ export default function App() {
           }>
             <AnimatePresence mode="wait">
               <Routes>
-                <Route path="/" element={user && username ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
-                <Route path="/login" element={user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={true} />} />
-                <Route path="/signup" element={user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={false} />} />
-                <Route path="/dashboard" element={user && username ? <Dashboard /> : <Navigate to="/login" />} />
-                <Route path="/:username" element={<Profile />} />
+                <Route path="/" element={
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {user && username ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
+                  </motion.div>
+                } />
+                <Route path="/login" element={
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={true} />}
+                  </motion.div>
+                } />
+                <Route path="/signup" element={
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={false} />}
+                  </motion.div>
+                } />
+                <Route path="/dashboard" element={
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {user && username ? <Dashboard /> : <Navigate to="/login" />}
+                  </motion.div>
+                } />
+                <Route path="/:username" element={
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    <Profile />
+                  </motion.div>
+                } />
               </Routes>
             </AnimatePresence>
           </React.Suspense>

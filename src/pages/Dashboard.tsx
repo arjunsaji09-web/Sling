@@ -49,9 +49,12 @@ const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 
 export default function Dashboard() {
   const { user, username, photoURL, refreshUser } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const cached = localStorage.getItem('sling_messages');
+    return cached ? JSON.parse(cached) : [];
+  });
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(messages.length === 0);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [activeTab, setActiveTab] = useState<'inbox' | 'friends'>('inbox');
   const [guessHint, setGuessHint] = useState<string | null>(null);
@@ -100,6 +103,7 @@ export default function Dashboard() {
       }
       
       setMessages(msgs);
+      localStorage.setItem('sling_messages', JSON.stringify(msgs));
       setLastMessageCount(msgs.length);
       setLoading(false);
     }, (error) => {
@@ -508,10 +512,10 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {loading ? (
+              {loading && messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-purple-500"></div>
-                  <p className="text-gray-500 text-sm">Loading your messages...</p>
+                  <div className="w-12 h-12 border-4 border-white/10 border-t-purple-500 rounded-full animate-spin" />
+                  <p className="text-gray-500 text-sm animate-pulse">Checking for messages...</p>
                 </div>
               ) : messages.length === 0 ? (
                 <motion.div 
