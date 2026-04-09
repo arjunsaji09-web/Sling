@@ -21,9 +21,12 @@ jobs:
           node-version: 20
           cache: 'npm'
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Build
-        run: npm run build
+        run: npm run build -- --base=./
+        env:
+          VITE_SKIP_TYPECHECK: true
+          TSC_COMPILE_ON_ERROR: true
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact

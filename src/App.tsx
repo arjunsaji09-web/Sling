@@ -88,6 +88,7 @@ export default function App() {
   const [photoURL, setPhotoURL] = useState<string | null>(localStorage.getItem('sling_photo'));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   const loadingRef = React.useRef(true);
 
   const fetchUserProfile = async (currentUser: User) => {
@@ -125,6 +126,7 @@ export default function App() {
     if (cachedPhoto) setPhotoURL(cachedPhoto);
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log('Auth state changed:', user ? 'Logged In' : 'Logged Out');
       setUser(user);
       if (user) {
         fetchUserProfile(user);
@@ -137,15 +139,39 @@ export default function App() {
       }
       loadingRef.current = false;
       setLoading(false);
+    }, (error) => {
+      console.error('Auth Error:', error);
+      setLoadError(`Firebase Auth Error: ${error.message}`);
+      loadingRef.current = false;
+      setLoading(false);
     });
+
+    // Check if we can even reach Firebase
+    const checkConnection = async () => {
+      try {
+        setDebugInfo('Checking Firebase connection...');
+        // A simple check to see if we can reach the auth service
+        if (!auth.app) {
+          throw new Error('Firebase App not initialized');
+        }
+        setDebugInfo('Firebase initialized, waiting for auth state...');
+      } catch (err: any) {
+        setLoadError(`Firebase Init Error: ${err.message}`);
+        loadingRef.current = false;
+        setLoading(false);
+      }
+    };
+
+    checkConnection();
 
     const safetyTimeout = setTimeout(() => {
       if (loadingRef.current) {
         console.warn('Loading safety timeout reached');
-        setLoadError('Firebase connection is taking too long. Please ensure your domain is added to "Authorized Domains" in the Firebase Console (Authentication > Settings).');
+        const currentUrl = window.location.href;
+        setLoadError(`Connection Timeout. \n\nDomain: ${window.location.hostname}\nURL: ${currentUrl}\n\nThis usually means your domain is not added to "Authorized Domains" in Firebase Authentication > Settings.`);
         setLoading(false);
       }
-    }, 10000);
+    }, 12000);
 
     return () => {
       unsubscribe();
@@ -160,7 +186,8 @@ export default function App() {
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
         <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
-        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.2)...</p>
+        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.3)...</p>
+        {debugInfo && <p className="mt-2 text-[10px] text-gray-700 font-mono">{debugInfo}</p>}
       </div>
     );
   }
