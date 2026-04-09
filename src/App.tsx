@@ -68,12 +68,23 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Oops! Something went wrong</h2>
           <p className="text-gray-400 mb-8 max-w-md">{errorMessage}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="gradient-bg px-8 py-3 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20"
-          >
-            Refresh Page
-          </button>
+          <div className="flex flex-col gap-4 w-full max-w-xs mx-auto">
+            <button 
+              onClick={() => window.location.reload()}
+              className="gradient-bg px-8 py-3 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20"
+            >
+              Refresh Page
+            </button>
+            <button 
+              onClick={() => {
+                localStorage.clear();
+                window.location.href = '/';
+              }}
+              className="text-gray-500 text-sm font-bold hover:text-gray-300"
+            >
+              Clear Cache & Logout
+            </button>
+          </div>
         </div>
       );
     }

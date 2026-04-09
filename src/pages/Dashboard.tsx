@@ -50,8 +50,13 @@ const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 export default function Dashboard() {
   const { user, username, photoURL, refreshUser } = useAuth();
   const [messages, setMessages] = useState<Message[]>(() => {
-    const cached = localStorage.getItem('sling_messages');
-    return cached ? JSON.parse(cached) : [];
+    try {
+      const cached = localStorage.getItem('sling_messages');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      console.error('Error parsing cached messages:', e);
+      return [];
+    }
   });
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(messages.length === 0);
@@ -159,11 +164,17 @@ export default function Dashboard() {
     const interval = setInterval(() => {
       const now = new Date();
       messages.forEach(async (msg) => {
-        if (msg.expiresAt && msg.expiresAt.toDate() < now) {
+        if (msg.expiresAt) {
           try {
-            await deleteDoc(doc(db, 'messages', msg.id));
+            const expiryDate = typeof msg.expiresAt.toDate === 'function' 
+              ? msg.expiresAt.toDate() 
+              : new Date(msg.expiresAt.seconds * 1000 || msg.expiresAt);
+              
+            if (expiryDate < now) {
+              await deleteDoc(doc(db, 'messages', msg.id));
+            }
           } catch (err) {
-            console.error("Failed to delete expired message", err);
+            console.error("Failed to check/delete expired message", err);
           }
         }
       });
@@ -171,13 +182,34 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [messages]);
 
+  const formatMessageDate = (createdAt: any) => {
+    if (!createdAt) return 'Just now';
+    try {
+      if (typeof createdAt.toDate === 'function') {
+        return createdAt.toDate().toLocaleDateString();
+      }
+      // Handle cached date (it might be a string or an object with seconds)
+      if (createdAt.seconds) {
+        return new Date(createdAt.seconds * 1000).toLocaleDateString();
+      }
+      return new Date(createdAt).toLocaleDateString();
+    } catch (e) {
+      return 'Recently';
+    }
+  };
+
   const getRemainingTime = (expiresAt: any) => {
     if (!expiresAt) return null;
-    const diff = expiresAt.toDate().getTime() - Date.now();
-    if (diff <= 0) return 'Expired';
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m left`;
+    try {
+      const date = typeof expiresAt.toDate === 'function' ? expiresAt.toDate() : new Date(expiresAt.seconds * 1000 || expiresAt);
+      const diff = date.getTime() - Date.now();
+      if (diff <= 0) return 'Expired';
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      return `${hours}h ${minutes}m left`;
+    } catch (e) {
+      return null;
+    }
   };
 
   const copyLink = () => {
@@ -563,7 +595,7 @@ export default function Dashboard() {
                                   )}
                                 </div>
                                 <span className="text-[10px] text-gray-500">
-                                  {msg.createdAt?.toDate().toLocaleDateString()} • {msg.deviceInfo || 'Web'}
+                                  {formatMessageDate(msg.createdAt)} • {msg.deviceInfo || 'Web'}
                                 </span>
                                 {msg.expiresAt && (
                                   <span className="text-[10px] text-red-400 font-bold flex items-center gap-1 mt-1">
