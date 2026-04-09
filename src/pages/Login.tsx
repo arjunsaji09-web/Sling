@@ -4,7 +4,7 @@ import {
   signInWithEmailAndPassword 
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Ghost, ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Camera, Image as ImageIcon, X } from 'lucide-react';
@@ -79,23 +79,23 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         let photoURL = null;
         if (profilePic) {
           try {
-            console.log('Starting Upload');
+            console.log('Starting Upload for UID:', user.uid);
             const storageRef = ref(storage, `profiles/${user.uid}`);
-            const uploadTask = uploadBytesResumable(storageRef, profilePic);
-            await uploadTask;
-            console.log('Upload Complete');
+            
+            // Use simple uploadBytes for better compatibility on some browsers
+            const uploadResult = await uploadBytes(storageRef, profilePic);
+            console.log('Upload Result:', uploadResult);
             
             photoURL = await getDownloadURL(storageRef);
             console.log('URL Retrieved:', photoURL);
           } catch (storageErr: any) {
-            console.error('Error uploading profile pic:', storageErr);
-            let errorMessage = 'Failed to upload profile picture.';
+            console.error('Detailed Storage Error:', storageErr);
+            let errorMessage = 'Profile picture upload failed. You can still sign up and add it later.';
             if (storageErr.code === 'storage/unauthorized') {
-              errorMessage = 'Permission Denied: Storage upload failed.';
-            } else if (storageErr.code === 'storage/retry-limit-exceeded') {
-              errorMessage = 'Network Error: Storage upload timed out.';
+              errorMessage = 'Firebase Storage Permission Denied. Please ensure Storage is "Started" in the Firebase Console.';
             }
             setError(errorMessage);
+            // We don't return here so the user can still sign up even if DP fails
           }
         }
 
