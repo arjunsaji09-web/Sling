@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React, { useState, useEffect, createContext, useContext, ErrorInfo, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -87,6 +87,7 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(localStorage.getItem('sling_username'));
   const [photoURL, setPhotoURL] = useState<string | null>(localStorage.getItem('sling_photo'));
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchUserProfile = async (currentUser: User) => {
     try {
@@ -138,10 +139,13 @@ export default function App() {
       setLoading(false);
     });
 
-    // Safety timeout to ensure loading screen doesn't hang forever
     const safetyTimeout = setTimeout(() => {
-      setLoading(false);
-    }, 5000);
+      if (loading) {
+        console.warn('Loading safety timeout reached');
+        setLoadError('Firebase connection is taking too long. Please ensure your domain is added to "Authorized Domains" in the Firebase Console (Authentication > Settings).');
+        setLoading(false);
+      }
+    }, 6000);
 
     return () => {
       unsubscribe();
@@ -156,6 +160,33 @@ export default function App() {
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
         <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
+        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection...</p>
+      </div>
+    );
+  }
+
+  if (loadError && !user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-6 text-center">
+        <div className="w-20 h-20 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-6">
+          <div className="w-10 h-10 text-amber-500 text-2xl flex items-center justify-center">⏳</div>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Connection Timeout</h2>
+        <p className="text-gray-400 mb-8 max-w-md">{loadError}</p>
+        <div className="flex flex-col gap-4 w-full max-w-xs">
+          <button 
+            onClick={() => window.location.reload()}
+            className="gradient-bg px-8 py-3 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20"
+          >
+            Try Again
+          </button>
+          <button 
+            onClick={() => setLoadError(null)}
+            className="text-gray-500 text-sm font-bold hover:text-gray-300"
+          >
+            Continue to Login
+          </button>
+        </div>
       </div>
     );
   }
