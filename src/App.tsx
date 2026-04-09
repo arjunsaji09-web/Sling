@@ -88,6 +88,7 @@ export default function App() {
   const [photoURL, setPhotoURL] = useState<string | null>(localStorage.getItem('sling_photo'));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadingRef = React.useRef(true);
 
   const fetchUserProfile = async (currentUser: User) => {
     try {
@@ -126,26 +127,25 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       if (user) {
-        // Start fetching fresh data in background
         fetchUserProfile(user);
       } else {
         setUsername(null);
         setPhotoURL(null);
         localStorage.removeItem('sling_username');
         localStorage.removeItem('sling_photo');
-        localStorage.removeItem('sling_messages'); // Clear messages on logout
+        localStorage.removeItem('sling_messages');
       }
-      // Set loading to false as soon as we know the auth state
+      loadingRef.current = false;
       setLoading(false);
     });
 
     const safetyTimeout = setTimeout(() => {
-      if (loading) {
+      if (loadingRef.current) {
         console.warn('Loading safety timeout reached');
         setLoadError('Firebase connection is taking too long. Please ensure your domain is added to "Authorized Domains" in the Firebase Console (Authentication > Settings).');
         setLoading(false);
       }
-    }, 6000);
+    }, 10000);
 
     return () => {
       unsubscribe();
@@ -160,7 +160,7 @@ export default function App() {
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
         <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
-        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection...</p>
+        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.2)...</p>
       </div>
     );
   }
