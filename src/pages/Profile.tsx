@@ -4,7 +4,7 @@ import { collection, query, where, getDocs, addDoc, serverTimestamp, limit, Time
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 import { db, storage, auth } from '../lib/firebase';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Ghost, 
   Send, 

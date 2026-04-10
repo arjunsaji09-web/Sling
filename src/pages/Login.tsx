@@ -6,7 +6,7 @@ import {
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Ghost, ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Camera, Image as ImageIcon, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';

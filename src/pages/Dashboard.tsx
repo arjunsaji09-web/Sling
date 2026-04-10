@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc, 
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, auth, storage } from '../lib/firebase';
 import { useAuth } from '../App';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Ghost, 
   Share2, 

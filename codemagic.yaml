@@ -19,10 +19,13 @@ workflows:
       - name: Build Android APK
         script: |
           cd android
+          # Fix line endings and permissions
           tr -d '\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew
           chmod +x gradlew
+          # Set SDK path
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          # Clean and build with detailed logs
+          ./gradlew clean :app:assembleDebug --no-daemon --info --stacktrace
     artifacts:
       - android/app/build/outputs/apk/debug/*.apk
     publishing:

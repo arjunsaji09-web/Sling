@@ -6,7 +6,7 @@ import { auth, db } from './lib/firebase';
 import Login from './pages/Login';
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Profile = React.lazy(() => import('./pages/Profile'));
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface AuthContextType {
   user: User | null;
