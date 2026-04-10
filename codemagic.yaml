@@ -11,6 +11,8 @@ workflows:
     environment:
       node: 20
       java: 17
+      groups:
+        - android-sdk
     scripts:
       - name: Install dependencies
         script: |
@@ -23,11 +25,14 @@ workflows:
           npx cap sync android
       - name: Build Android APK
         script: |
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          cd android
           # Fix line endings and permissions for the Gradle wrapper
-          cd android && tr -d '\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew && chmod +x gradlew && cd ..
-          # The Capacitor CLI build command handles Gradle and APK generation
-          npx cap build android --apk --flavor debug
+          tr -d '\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew
+          chmod +x gradlew
+          # Set SDK path
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          # Build the APK - Try wrapper first, then system gradle
+          ./gradlew assembleDebug --no-daemon --stacktrace || gradle assembleDebug --no-daemon --stacktrace
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
     publishing:
