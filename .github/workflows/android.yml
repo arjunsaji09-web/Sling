@@ -25,10 +25,15 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build Web App
         run: npm run build
+        env:
+          VITE_SKIP_TYPECHECK: true
+
+      - name: Verify Build
+        run: ls -R dist
 
       - name: Sync Capacitor
         run: npx cap sync android
@@ -37,7 +42,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

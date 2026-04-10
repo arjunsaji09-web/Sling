@@ -19,6 +19,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const [isLogin, setIsLogin] = useState(isLoginMode);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [gender, setGender] = useState<'boy' | 'girl' | 'neutral'>('neutral');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,14 +45,34 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     }
   };
 
+  const isStrongPassword = (pass: string) => {
+    const minLength = 8;
+    const hasUpperCase = /[A-Z]/.test(pass);
+    const hasLowerCase = /[a-z]/.test(pass);
+    const hasNumber = /[0-9]/.test(pass);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(pass);
+    return pass.length >= minLength && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar;
+  };
+
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     if (!username || username.length < 3) {
       setError('Username must be at least 3 characters');
       return;
     }
-    if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters');
+    
+    if (!isLogin && !isStrongPassword(password)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character');
+      return;
+    }
+
+    if (!isLogin && password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (isLogin && (!password || password.length < 6)) {
+      setError('Invalid password format');
       return;
     }
     
@@ -227,6 +248,64 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   disabled={loading}
                 />
               </div>
+              {!isLogin && password && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex gap-1 h-1">
+                    {[1, 2, 3, 4].map((i) => {
+                      const strength = 
+                        (password.length >= 8 ? 1 : 0) +
+                        (/[A-Z]/.test(password) ? 1 : 0) +
+                        (/[0-9]/.test(password) ? 1 : 0) +
+                        (/[!@#$%^&*(),.?":{}|<>]/.test(password) ? 1 : 0);
+                      return (
+                        <div 
+                          key={i}
+                          className={cn(
+                            "flex-1 rounded-full transition-all duration-500",
+                            i <= strength 
+                              ? strength <= 2 ? "bg-red-500" : strength === 3 ? "bg-yellow-500" : "bg-green-500"
+                              : "bg-white/5"
+                          )}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <p className={cn("text-[10px] flex items-center gap-1", password.length >= 8 ? "text-green-400" : "text-gray-600")}>
+                      <span className="w-1 h-1 rounded-full bg-current" /> 8+ Characters
+                    </p>
+                    <p className={cn("text-[10px] flex items-center gap-1", /[A-Z]/.test(password) ? "text-green-400" : "text-gray-600")}>
+                      <span className="w-1 h-1 rounded-full bg-current" /> Uppercase
+                    </p>
+                    <p className={cn("text-[10px] flex items-center gap-1", /[0-9]/.test(password) ? "text-green-400" : "text-gray-600")}>
+                      <span className="w-1 h-1 rounded-full bg-current" /> Number
+                    </p>
+                    <p className={cn("text-[10px] flex items-center gap-1", /[!@#$%^&*(),.?":{}|<>]/.test(password) ? "text-green-400" : "text-gray-600")}>
+                      <span className="w-1 h-1 rounded-full bg-current" /> Special Char
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!isLogin && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              )}
+
               {error && <p className="text-red-400 text-xs mt-3 ml-1 flex items-center gap-1">
                 <span className="w-1 h-1 bg-red-400 rounded-full" />
                 {error}
