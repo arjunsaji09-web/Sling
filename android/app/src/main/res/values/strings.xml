@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sling</string>
+    <string name="title_activity_main">Sling</string>
+    <string name="package_name">com.sling.app</string>
+    <string name="custom_url_scheme">com.sling.app</string>
+</resources>
