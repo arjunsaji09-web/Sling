@@ -9,7 +9,7 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm install
+          npm install --legacy-peer-deps
       - name: Build web project
         script: |
           npm run build
@@ -19,8 +19,10 @@ workflows:
       - name: Build Android APK
         script: |
           cd android
+          tr -d '\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
     artifacts:
       - android/app/build/outputs/apk/debug/*.apk
     publishing:
