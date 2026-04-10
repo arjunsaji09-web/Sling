@@ -23,18 +23,13 @@ workflows:
           npx cap sync android
       - name: Build Android APK
         script: |
-          cd android
-          # Fix line endings and permissions
-          tr -d '\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew
-          chmod +x gradlew
-          # Accept licenses
-          yes | sdkmanager --licenses || true
-          # Set SDK path
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          # Clean and build with detailed logs
-          ./gradlew clean assembleDebug --no-daemon --info --stacktrace
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          # Fix line endings and permissions for the Gradle wrapper
+          cd android && tr -d '\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew && chmod +x gradlew && cd ..
+          # The Capacitor CLI build command handles Gradle and APK generation
+          npx cap build android --apk --flavor debug
     artifacts:
-      - android/app/build/outputs/apk/debug/*.apk
+      - android/app/build/outputs/apk/debug/app-debug.apk
     publishing:
       email:
         recipients:
