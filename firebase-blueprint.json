@@ -8,9 +8,10 @@
         "uid": { "type": "string" },
         "username": { "type": "string" },
         "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "username"]
+      "required": ["uid", "username", "role"]
     },
     "Message": {
       "title": "Message",

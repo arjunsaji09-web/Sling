@@ -6,12 +6,15 @@ import { auth, db } from './lib/firebase';
 import Login from './pages/Login';
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Profile = React.lazy(() => import('./pages/Profile'));
+const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
+import AdminGuard from './components/AdminGuard';
 import { AnimatePresence, motion } from 'framer-motion';
 
 interface AuthContextType {
   user: User | null;
   username: string | null;
   photoURL: string | null;
+  role: 'user' | 'admin' | null;
   loading: boolean;
   refreshUser: () => Promise<void>;
 }
@@ -20,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null, 
   username: null, 
   photoURL: null, 
+  role: null,
   loading: true,
   refreshUser: async () => {} 
 });
@@ -97,6 +101,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(localStorage.getItem('sling_username'));
   const [photoURL, setPhotoURL] = useState<string | null>(localStorage.getItem('sling_photo'));
+  const [role, setRole] = useState<'user' | 'admin' | null>(localStorage.getItem('sling_role') as any);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
@@ -110,11 +115,14 @@ export default function App() {
         const data = userDoc.data();
         const name = data.username;
         const photo = data.photoURL || null;
+        const userRole = data.role || 'user';
         
         setUsername(name);
         setPhotoURL(photo);
+        setRole(userRole);
         
         localStorage.setItem('sling_username', name);
+        localStorage.setItem('sling_role', userRole);
         if (photo) localStorage.setItem('sling_photo', photo);
         else localStorage.removeItem('sling_photo');
       }
@@ -144,8 +152,10 @@ export default function App() {
       } else {
         setUsername(null);
         setPhotoURL(null);
+        setRole(null);
         localStorage.removeItem('sling_username');
         localStorage.removeItem('sling_photo');
+        localStorage.removeItem('sling_role');
         localStorage.removeItem('sling_messages');
       }
       loadingRef.current = false;
@@ -230,7 +240,7 @@ export default function App() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, username, photoURL, loading, refreshUser }}>
+    <AuthContext.Provider value={{ user, username, photoURL, role, loading, refreshUser }}>
       <ErrorBoundary>
         <Router>
           <React.Suspense fallback={
@@ -261,6 +271,13 @@ export default function App() {
                 <Route path="/dashboard" element={
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                     {user && username ? <Dashboard /> : <Navigate to="/login" />}
+                  </motion.div>
+                } />
+                <Route path="/admin-secure-panel" element={
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    <AdminGuard>
+                      <AdminPanel />
+                    </AdminGuard>
                   </motion.div>
                 } />
                 <Route path="/:username" element={

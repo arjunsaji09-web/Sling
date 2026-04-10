@@ -25,8 +25,9 @@ import {
   Clock,
   Send,
   Camera,
-  Image as ImageIcon,
-  User as UserIcon
+  ImageIcon,
+  User as UserIcon,
+  Shield
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -48,7 +49,7 @@ interface Message {
 const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 
 export default function Dashboard() {
-  const { user, username, photoURL, refreshUser } = useAuth();
+  const { user, username, photoURL, role, refreshUser } = useAuth();
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
       const cached = localStorage.getItem('sling_messages');
@@ -453,9 +454,16 @@ export default function Dashboard() {
           </div>
           <span className="font-bold text-xl tracking-tight">Sling</span>
         </div>
-        <button onClick={logout} className="p-2 text-gray-400 hover:text-white transition-colors">
-          <LogOut className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {role === 'admin' && (
+            <Link to="/admin-secure-panel" className="p-2 text-purple-400 hover:text-purple-300 transition-colors">
+              <Shield className="w-5 h-5" />
+            </Link>
+          )}
+          <button onClick={logout} className="p-2 text-gray-400 hover:text-white transition-colors">
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 pt-8">

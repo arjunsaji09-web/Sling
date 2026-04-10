@@ -119,6 +119,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           username: sanitizedUsername,
           photoURL,
           avatarType: gender,
+          role: 'user',
           createdAt: new Date()
         });
         console.log('Database Updated');
