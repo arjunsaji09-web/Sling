@@ -5,13 +5,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v3
 
       - name: Build APK
         uses: sw928/webview-to-apk-action@v1.1
         with:
-          app_name: "Sling"  # Change this to your app name
-          url: "https://yourusername.github.io/your-repo/" # CHANGE THIS TO YOUR GITHUB PAGES URL
-          icon_url: "https://cdn-icons-png.flaticon.com/512/5968/5968841.png" # You can put a link to your icon here
-
+          app_name: "Sling"
+          # This matches your repository name in the screenshot
+          url: "https://sling-msg.github.io/Sling/"
+          icon_url: "https://cdn-icons-png.flaticon.com/512/5968/5968841.png"
+          
