@@ -83,7 +83,7 @@ export default function Dashboard() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const profileUrl = `https://rebrand.ly/Goshtmsg/${username}`;
+  const profileUrl = `${window.location.origin}/${username}`;
 
   const [showNotification, setShowNotification] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
@@ -944,7 +944,7 @@ export default function Dashboard() {
                   <div className="pt-6 border-t border-white/10">
                     <p className="text-sm font-bold text-white/60">Send me anonymous messages!</p>
                     <p className="text-lg font-black text-white mt-1 uppercase tracking-tighter">
-                      rebrand.ly/Goshtmsg
+                      {window.location.host}/{username}
                     </p>
                   </div>
                 </div>
