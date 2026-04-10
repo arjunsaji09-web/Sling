@@ -2,12 +2,8 @@ workflows:
   android-workflow:
     name: Android Build
     max_build_duration: 60
-    instance_type: mac_mini_m1
+    instance_type: linux_x2
     environment:
-      groups:
-        - google_play_credentials # Optional, if you have them
-      vars:
-        PACKAGE_NAME: "com.sling.app"
       node: 20
       java: 17
     scripts:
@@ -22,13 +18,14 @@ workflows:
           npx cap sync android
       - name: Build Android APK
         script: |
-          cd android && ./gradlew assembleDebug
+          cd android
+          ./gradlew assembleDebug --no-daemon
     artifacts:
       - android/app/build/outputs/apk/debug/*.apk
     publishing:
       email:
         recipients:
-          - arjunsaji09@gmail.com # Your email from the context
+          - arjunsaji09@gmail.com
         notify:
           success: true
           failure: true
