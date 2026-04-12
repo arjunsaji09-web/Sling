@@ -207,10 +207,10 @@ export default function App() {
       if (loadingRef.current) {
         console.warn('Loading safety timeout reached');
         const currentUrl = window.location.href;
-        setLoadError(`Connection Timeout. \n\nDomain: ${window.location.hostname}\nURL: ${currentUrl}\n\nThis usually means your domain is not added to "Authorized Domains" in Firebase Authentication > Settings.`);
+        setLoadError(`Connection Timeout. \n\nDomain: ${window.location.hostname}\n\nTroubleshooting:\n1. Ensure "${window.location.hostname}" is added to "Authorized Domains" in Firebase Authentication.\n2. Check if your internet is stable.\n3. Try clearing your browser cache.`);
         setLoading(false);
       }
-    }, 12000);
+    }, 20000);
 
     return () => {
       unsubscribe();

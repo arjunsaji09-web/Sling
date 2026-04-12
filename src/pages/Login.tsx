@@ -54,41 +54,66 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
       // Check if user profile exists
       console.log('Checking Firestore profile for:', user.uid);
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (!userDoc.exists()) {
-        console.log('No profile found. Creating new profile...');
-        // New user - create profile
-        const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || 'user';
+      let userDoc;
+      try {
+        userDoc = await getDoc(doc(db, 'users', user.uid));
+      } catch (docErr: any) {
+        console.error('Error fetching user doc:', docErr);
+        throw new Error(`Could not access database: ${docErr.message}. This usually means Security Rules are not deployed.`);
+      }
+
+      if (!userDoc.exists() || !userDoc.data()?.username) {
+        console.log('No profile found or incomplete. Creating/Updating profile...');
+        // New user or incomplete profile - create profile
+        const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.uid.slice(0, 5)}`;
         let finalUsername = baseUsername;
         
         // Check if taken
-        const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername));
-        if (usernameDoc.exists()) {
+        try {
+          const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername));
+          if (usernameDoc.exists() && usernameDoc.data()?.uid !== user.uid) {
+            finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
+          }
+        } catch (e) {
+          console.warn('Username check failed, using randomized:', e);
           finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
         }
 
         console.log('Setting username to:', finalUsername);
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          username: finalUsername,
-          email: user.email || '',
-          photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
-          role: 'user',
-          createdAt: serverTimestamp()
-        });
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            username: finalUsername,
+            email: user.email || '',
+            photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
+            role: 'user',
+            createdAt: serverTimestamp()
+          }, { merge: true });
 
-        await setDoc(doc(db, 'usernames', finalUsername), {
-          uid: user.uid,
-          email: user.email || ''
-        });
+          await setDoc(doc(db, 'usernames', finalUsername), {
+            uid: user.uid,
+            email: user.email || ''
+          });
+        } catch (writeErr: any) {
+          console.error('Error writing profile:', writeErr);
+          throw new Error(`Failed to create profile: ${writeErr.message}. Please check your internet or contact support.`);
+        }
 
         console.log('Profile created successfully.');
         // Force a profile refresh in App.tsx
-        await refreshUser();
+        try {
+          await refreshUser();
+        } catch (refreshErr) {
+          console.warn('Refresh user failed, but profile was created:', refreshErr);
+        }
       } else {
         console.log('Existing profile found:', userDoc.data()?.username);
         // Existing user - just refresh profile to be sure
-        await refreshUser();
+        try {
+          await refreshUser();
+        } catch (refreshErr) {
+          console.warn('Refresh user failed for existing user:', refreshErr);
+        }
       }
     } catch (err: any) {
       console.error('Google Login Error:', err);
@@ -98,6 +123,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to "Authorized Domains" in the Firebase Console.`);
       } else if (err.code === 'auth/popup-blocked') {
         setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Google Sign-In is not enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.');
       } else {
         setError(err.message || 'Google Login failed');
       }
