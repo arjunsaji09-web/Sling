@@ -36,6 +36,16 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
 
+  const [isCapsLockOn, setIsCapsLockOn] = useState(false);
+
+  const checkCapsLock = (e: React.KeyboardEvent) => {
+    if (e.getModifierState('CapsLock')) {
+      setIsCapsLockOn(true);
+    } else {
+      setIsCapsLockOn(false);
+    }
+  };
+
   useEffect(() => {
     const checkUsername = async () => {
       if (isLogin || isFinishingProfile || username.length < 3) {
@@ -232,8 +242,10 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     
     const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
     const isEmailInput = username.includes('@');
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
 
-    if (!isLogin && !isFinishingProfile && (!email || !email.includes('@'))) {
+    if (!isLogin && !isFinishingProfile && (!cleanEmail || !cleanEmail.includes('@'))) {
       setError('Please enter a valid email address');
       return;
     }
@@ -243,12 +255,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       return;
     }
     
-    if (!isLogin && password.length < 6) {
+    if (!isLogin && cleanPassword.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
 
-    if (!isLogin && !isFinishingProfile && password !== confirmPassword) {
+    if (!isLogin && !isFinishingProfile && cleanPassword !== confirmPassword.trim()) {
       setError('Passwords do not match');
       return;
     }
@@ -268,7 +280,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         await setDoc(doc(db, 'users', currentUser.uid), {
           uid: currentUser.uid,
           username: sanitizedUsername,
-          email: currentUser.email || email,
+          email: currentUser.email || cleanEmail,
           photoURL,
           avatarType,
           role: userRole,
@@ -277,7 +289,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
         await setDoc(doc(db, 'usernames', sanitizedUsername), {
           uid: currentUser.uid,
-          email: currentUser.email || email
+          email: currentUser.email || cleanEmail
         });
 
         await refreshUser();
@@ -287,7 +299,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isLogin) {
         let loginEmail = '';
         if (isEmailInput) {
-          loginEmail = username.trim();
+          loginEmail = username.trim().toLowerCase();
         } else {
           console.log('Attempting username lookup for:', sanitizedUsername);
           const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
@@ -311,7 +323,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         }
 
         console.log('Final login email:', loginEmail);
-        await signInWithEmailAndPassword(auth, loginEmail, password);
+        await signInWithEmailAndPassword(auth, loginEmail, cleanPassword);
       } else {
         // Sign Up
         const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
@@ -321,7 +333,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           return;
         }
 
-        const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        const { user } = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
         
         try {
           await sendEmailVerification(user);
@@ -332,12 +344,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         if (avatarType === 'girl') avatarStyle = 'lorelei';
         
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
-        const userRole = email.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
+        const userRole = cleanEmail.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
         
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           username: sanitizedUsername,
-          email: email,
+          email: cleanEmail,
           photoURL,
           avatarType,
           role: userRole,
@@ -346,7 +358,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
         await setDoc(doc(db, 'usernames', sanitizedUsername), {
           uid: user.uid,
-          email: email
+          email: cleanEmail
         });
 
         await refreshUser();
@@ -550,6 +562,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     autoComplete={isLogin ? "current-password" : "new-password"}
+                    onKeyUp={checkCapsLock}
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                     disabled={loading}
                   />
@@ -561,6 +574,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {isCapsLockOn && (
+                  <div className="mt-2 flex items-center gap-2 text-yellow-500 text-[10px] font-bold animate-pulse">
+                    <ShieldCheck className="w-3 h-3" />
+                    CAPS LOCK IS ON
+                  </div>
+                )}
                 {isLogin && (
                   <div className="flex justify-end mt-2">
                     <button 
@@ -623,6 +642,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="••••••••"
+                        onKeyUp={checkCapsLock}
                         className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                         disabled={loading}
                       />
@@ -634,6 +654,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    {isCapsLockOn && (
+                      <div className="mt-2 flex items-center gap-2 text-yellow-500 text-[10px] font-bold animate-pulse">
+                        <ShieldCheck className="w-3 h-3" />
+                        CAPS LOCK IS ON
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -10,6 +10,7 @@ const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
 import AdminGuard from './components/AdminGuard';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Mail, LogOut, RefreshCw, CheckCircle } from 'lucide-react';
+import { cn } from './lib/utils';
 
 interface AuthContextType {
   user: User | null;
@@ -109,6 +110,9 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const loadingRef = React.useRef(true);
+
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   // Safe localStorage access
   const safeGetItem = (key: string) => {
@@ -250,6 +254,28 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    // Auto-check verification status every 10 seconds if user is logged in but not verified
+    let verificationInterval: NodeJS.Timeout | null = null;
+    if (user && user.email && !user.emailVerified) {
+      verificationInterval = setInterval(async () => {
+        try {
+          await user.reload();
+          if (auth.currentUser?.emailVerified) {
+            setUser(auth.currentUser);
+            await fetchUserProfile(auth.currentUser);
+          }
+        } catch (e) {
+          console.error('Auto-verification check failed:', e);
+        }
+      }, 10000);
+    }
+
+    return () => {
+      if (verificationInterval) clearInterval(verificationInterval);
+    };
+  }, [user]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-white font-sans">
@@ -316,21 +342,61 @@ export default function App() {
           
           <div className="space-y-4">
             <button 
-              onClick={() => window.location.reload()}
-              className="w-full gradient-bg py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20"
+              onClick={async () => {
+                if (!user) return;
+                setIsVerifying(true);
+                try {
+                  // Force reload the user profile from Firebase to get updated emailVerified status
+                  await user.reload();
+                  const updatedUser = auth.currentUser;
+                  if (updatedUser?.emailVerified) {
+                    // Success! Update local state
+                    setUser(updatedUser);
+                    await fetchUserProfile(updatedUser);
+                  } else {
+                    // Still not verified
+                    setVerificationError("Email not verified yet. Please check your inbox and click the link.");
+                  }
+                } catch (err: any) {
+                  console.error('Verification check error:', err);
+                  setVerificationError("Failed to check status. Please try again or refresh the page.");
+                } finally {
+                  setIsVerifying(false);
+                }
+              }}
+              disabled={isVerifying}
+              className="w-full gradient-bg py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20 disabled:opacity-50"
             >
-              <RefreshCw className="w-4 h-4" />
-              I've verified my email
+              {isVerifying ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4" />
+              )}
+              {isVerifying ? "Checking..." : "I've verified my email"}
             </button>
+            
+            {verificationError && (
+              <motion.p 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  "text-xs font-medium",
+                  verificationError.includes("resent") ? "text-green-500" : "text-red-500"
+                )}
+              >
+                {verificationError}
+              </motion.p>
+            )}
             
             <button 
               onClick={async () => {
+                setVerificationError(null);
                 try {
                   await sendEmailVerification(user);
-                  // Verification email resent
-                  console.log('Verification email resent!');
+                  setVerificationError("Verification email resent! Please check your inbox.");
                 } catch (err: any) {
                   console.error('Resend error:', err.message);
+                  setVerificationError("Too many requests. Please wait a moment before resending.");
                 }
               }}
               className="w-full bg-white/5 py-4 rounded-xl font-bold text-gray-400 hover:text-white transition-colors"
