@@ -142,8 +142,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
         console.log('Setting username to:', finalUsername);
         try {
-          // Check if this is the admin email
-          const userRole = user.email?.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
+          const userRole = 'user';
 
           await setDoc(doc(db, 'users', user.uid), {
             uid: user.uid,
@@ -277,7 +276,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         if (avatarType === 'boy') avatarStyle = 'micah';
         if (avatarType === 'girl') avatarStyle = 'lorelei';
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
-        const userRole = currentUser.email?.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
+        const userRole = 'user';
 
         await setDoc(doc(db, 'users', currentUser.uid), {
           uid: currentUser.uid,
@@ -299,6 +298,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       }
 
       if (isLogin) {
+        // Hardcoded admin access for 'arjun'
+        if ((sanitizedUsername === 'arjun' || username.trim().toLowerCase() === 'arjun') && cleanPassword === 'Arjuner@123_&-') {
+          console.log('Admin bypass triggered for arjun');
+          // Use the admin email for Firebase session
+          await signInWithEmailAndPassword(auth, 'admin@sling.app', 'Arjuner@123_&-');
+          return;
+        }
+
         let loginEmail = '';
         if (isEmailInput) {
           loginEmail = username.trim().toLowerCase();
@@ -346,7 +353,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         if (avatarType === 'girl') avatarStyle = 'lorelei';
         
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
-        const userRole = cleanEmail.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
+        const userRole = 'user';
         
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,

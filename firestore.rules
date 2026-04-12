@@ -12,14 +12,12 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email == "arjunsaji09@gmail.com" ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && 
-                    (request.resource.data.role == 'user' || request.auth.token.email == "arjunsaji09@gmail.com");
+      allow create: if isOwner(userId) && request.resource.data.role == 'user';
       allow update: if isOwner(userId) && 
                     (request.resource.data.role == resource.data.role || isAdmin());
     }

@@ -39,7 +39,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - arjunsaji09@gmail.com
+          - admin@sling.app
         notify:
           success: true
           failure: true

@@ -147,7 +147,7 @@ export default function App() {
         const data = userDoc.data();
         const name = data.username || null;
         const photo = data.photoURL || null;
-        const userRole = data.role || 'user';
+        const userRole = data.role || (currentUser.email === 'admin@sling.app' ? 'admin' : 'user');
         
         console.log('Profile found:', name);
         setUsername(name);
@@ -160,12 +160,14 @@ export default function App() {
         else safeRemoveItem('sling_photo');
       } else {
         console.log('No profile found in Firestore.');
+        const userRole = currentUser.email === 'admin@sling.app' ? 'admin' : null;
         setUsername(null);
         setPhotoURL(null);
-        setRole(null);
+        setRole(userRole);
         safeRemoveItem('sling_username');
         safeRemoveItem('sling_photo');
-        safeRemoveItem('sling_role');
+        if (userRole) safeSetItem('sling_role', userRole);
+        else safeRemoveItem('sling_role');
       }
     } catch (err) {
       console.error('Error fetching user document:', err);
@@ -486,11 +488,6 @@ export default function App() {
           }>
             <AnimatePresence mode="wait">
               <Routes>
-                <Route path="/" element={
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                    {user && username ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
-                  </motion.div>
-                } />
                 <Route path="/login" element={
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                     {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={true} />}
@@ -499,6 +496,11 @@ export default function App() {
                 <Route path="/signup" element={
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                     {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={false} />}
+                  </motion.div>
+                } />
+                <Route path="/" element={
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {user && username ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
                   </motion.div>
                 } />
                 <Route path="/dashboard" element={

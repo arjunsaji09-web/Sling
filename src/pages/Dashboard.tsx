@@ -465,7 +465,7 @@ export default function Dashboard() {
           >
             <HelpCircle className="w-5 h-5" />
           </button>
-          {(role === 'admin' || user?.email?.toLowerCase() === 'arjunsaji09@gmail.com') && (
+          {role === 'admin' && (
             <Link to="/admin-secure-panel" className="p-2 text-purple-400 hover:text-purple-300 transition-colors">
               <Shield className="w-5 h-5" />
             </Link>
