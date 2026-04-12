@@ -6,11 +6,12 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
+import { useAuth } from '../App';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Camera, Image as ImageIcon, X, Phone, Mail } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
@@ -19,6 +20,7 @@ interface LoginProps {
 }
 
 export default function Login({ isLoginMode = true }: LoginProps) {
+  const { refreshUser } = useAuth();
   const [isLogin, setIsLogin] = useState(isLoginMode);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -36,16 +38,21 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   }, [isLoginMode]);
 
   const handleGoogleLogin = async () => {
+    console.log('Starting Google Login...');
     setLoading(true);
     setError('');
     try {
       const provider = new GoogleAuthProvider();
+      console.log('Calling signInWithPopup...');
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
+      console.log('Google Login Success:', user.email);
 
       // Check if user profile exists
+      console.log('Checking Firestore profile for:', user.uid);
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (!userDoc.exists()) {
+        console.log('No profile found. Creating new profile...');
         // New user - create profile
         const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || 'user';
         let finalUsername = baseUsername;
@@ -56,24 +63,37 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
         }
 
+        console.log('Setting username to:', finalUsername);
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           username: finalUsername,
-          email: user.email,
+          email: user.email || '',
           photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
           role: 'user',
-          createdAt: new Date()
+          createdAt: serverTimestamp()
         });
 
         await setDoc(doc(db, 'usernames', finalUsername), {
           uid: user.uid,
-          email: user.email
+          email: user.email || ''
         });
+
+        console.log('Profile created successfully.');
+        // Force a profile refresh in App.tsx
+        await refreshUser();
+      } else {
+        console.log('Existing profile found:', userDoc.data()?.username);
+        // Existing user - just refresh profile to be sure
+        await refreshUser();
       }
     } catch (err: any) {
       console.error('Google Login Error:', err);
       if (err.code === 'auth/popup-closed-by-user') {
-        setError('Login cancelled');
+        setError('Login cancelled. Please complete the sign-in in the popup.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to "Authorized Domains" in the Firebase Console.`);
+      } else if (err.code === 'auth/popup-blocked') {
+        setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
       } else {
         setError(err.message || 'Google Login failed');
       }
@@ -200,7 +220,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           photoURL,
           avatarType: gender,
           role: 'user',
-          createdAt: new Date()
+          createdAt: serverTimestamp()
         });
 
         // Reserve username
@@ -208,6 +228,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           uid: user.uid,
           email: email
         });
+
+        await refreshUser();
       }
     } catch (err: any) {
       console.error('Auth Error Details:', err);

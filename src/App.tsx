@@ -126,6 +126,13 @@ export default function App() {
         localStorage.setItem('sling_role', userRole);
         if (photo) localStorage.setItem('sling_photo', photo);
         else localStorage.removeItem('sling_photo');
+      } else {
+        setUsername(null);
+        setPhotoURL(null);
+        setRole(null);
+        localStorage.removeItem('sling_username');
+        localStorage.removeItem('sling_photo');
+        localStorage.removeItem('sling_role');
       }
     } catch (err) {
       console.error('Error fetching user document:', err);
