@@ -1,6 +1,6 @@
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React, { useState, useEffect, createContext, useContext, ErrorInfo, ReactNode } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import Login from './pages/Login';
@@ -9,6 +9,7 @@ const Profile = React.lazy(() => import('./pages/Profile'));
 const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
 import AdminGuard from './components/AdminGuard';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Mail, LogOut, RefreshCw, CheckCircle } from 'lucide-react';
 
 interface AuthContextType {
   user: User | null;
@@ -144,12 +145,16 @@ export default function App() {
     if (cachedUsername) setUsername(cachedUsername);
     if (cachedPhoto) setPhotoURL(cachedPhoto);
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('Auth state changed:', user ? 'Logged In' : 'Logged Out');
-      setUser(user);
+      
       if (user) {
-        fetchUserProfile(user);
+        // If we have a user, we MUST fetch the profile before stopping the loading state
+        // to avoid the "double redirect" jank (redirecting to login then back to dashboard)
+        setUser(user);
+        await fetchUserProfile(user);
       } else {
+        setUser(null);
         setUsername(null);
         setPhotoURL(null);
         setRole(null);
@@ -158,6 +163,7 @@ export default function App() {
         localStorage.removeItem('sling_role');
         localStorage.removeItem('sling_messages');
       }
+      
       loadingRef.current = false;
       setLoading(false);
     }, (error) => {
@@ -235,6 +241,60 @@ export default function App() {
             Continue to Login
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Email Verification Screen
+  if (user && user.email && !user.emailVerified) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-6 text-center">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-full max-w-md glass p-8 rounded-[2rem]"
+        >
+          <div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+            <Mail className="w-10 h-10 text-purple-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Verify your email</h2>
+          <p className="text-gray-400 mb-8">
+            We've sent a verification link to <span className="text-white font-medium">{user.email}</span>. 
+            Please check your inbox and click the link to activate your account.
+          </p>
+          
+          <div className="space-y-4">
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full gradient-bg py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20"
+            >
+              <RefreshCw className="w-4 h-4" />
+              I've verified my email
+            </button>
+            
+            <button 
+              onClick={async () => {
+                try {
+                  await sendEmailVerification(user);
+                  alert('Verification email resent!');
+                } catch (err: any) {
+                  alert(err.message);
+                }
+              }}
+              className="w-full bg-white/5 py-4 rounded-xl font-bold text-gray-400 hover:text-white transition-colors"
+            >
+              Resend Email
+            </button>
+            
+            <button 
+              onClick={() => signOut(auth)}
+              className="w-full flex items-center justify-center gap-2 text-gray-600 text-sm hover:text-gray-400 transition-colors pt-4"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout and try another account
+            </button>
+          </div>
+        </motion.div>
       </div>
     );
   }

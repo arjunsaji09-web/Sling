@@ -6,7 +6,7 @@ import { signInAnonymously } from 'firebase/auth';
 import { db, storage, auth } from '../lib/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Ghost, 
+  MessageCircle, 
   Send, 
   ShieldCheck, 
   ArrowLeft, 
@@ -19,7 +19,6 @@ import {
   Flame,
   Heart as HeartIcon,
   Clock,
-  MessageCircle
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { useAuth } from '../App';

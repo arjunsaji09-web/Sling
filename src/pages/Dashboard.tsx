@@ -5,11 +5,10 @@ import { db, auth, storage } from '../lib/firebase';
 import { useAuth } from '../App';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Ghost, 
+  MessageCircle, 
   Share2, 
   Copy, 
   Trash2, 
-  MessageCircle, 
   ExternalLink, 
   Check, 
   LogOut, 
@@ -805,7 +804,7 @@ export default function Dashboard() {
                         
                         {/* Subtle background decoration */}
                         <div className="absolute -bottom-4 -right-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                          <Ghost className="w-20 h-20" />
+                          <MessageCircle className="w-20 h-20" />
                         </div>
                       </motion.div>
                     ))}
@@ -937,8 +936,8 @@ export default function Dashboard() {
               <div className="gradient-bg p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden aspect-[4/5] flex flex-col items-center justify-center text-center">
                 {/* Decorative elements */}
                 <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-                  <Ghost className="absolute -top-10 -left-10 w-40 h-40 rotate-12" />
-                  <Ghost className="absolute -bottom-10 -right-10 w-40 h-40 -rotate-12" />
+                  <MessageCircle className="absolute -top-10 -left-10 w-40 h-40 rotate-12" />
+                  <MessageCircle className="absolute -bottom-10 -right-10 w-40 h-40 -rotate-12" />
                 </div>
 
                 <div className="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/20 w-full relative z-10">
