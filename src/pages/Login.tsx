@@ -11,7 +11,7 @@ import {
 import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
-import { useAuth } from '../App';
+import { useAuth, useLanguage } from '../App';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail, Eye, EyeOff, HelpCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -19,12 +19,16 @@ import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
 
+// Prefetch dashboard
+const prefetchDashboard = () => import('./Dashboard');
+
 interface LoginProps {
   isLoginMode?: boolean;
 }
 
 export default function Login({ isLoginMode = true }: LoginProps) {
   const { user: currentUser, username: profileUsername, refreshUser } = useAuth();
+  const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(isLoginMode);
   const [isFinishingProfile, setIsFinishingProfile] = useState(false);
   const [username, setUsername] = useState('');
@@ -68,7 +72,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       }
     };
 
-    const timer = setTimeout(checkUsername, 500);
+    const timer = setTimeout(checkUsername, 300);
     return () => clearTimeout(timer);
   }, [username, isLogin, isFinishingProfile]);
 
@@ -109,76 +113,43 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       // Force account selection to avoid "automatic" login issues
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      console.log('Calling signInWithPopup...');
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      console.log('Google Login Success:', user.email);
 
       // Check if user profile exists
-      console.log('Checking Firestore profile for:', user.uid);
-      let userDoc;
-      try {
-        userDoc = await getDoc(doc(db, 'users', user.uid));
-      } catch (docErr: any) {
-        console.error('Error fetching user doc:', docErr);
-        throw new Error(`Could not access database: ${docErr.message}. This usually means Security Rules are not deployed.`);
-      }
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
 
       if (!userDoc.exists() || !userDoc.data()?.username) {
-        console.log('No profile found or incomplete. Creating/Updating profile...');
         // New user or incomplete profile - create profile
         const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.uid.slice(0, 5)}`;
         let finalUsername = baseUsername;
         
-        // Check if taken
-        try {
-          const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername));
-          if (usernameDoc.exists() && usernameDoc.data()?.uid !== user.uid) {
-            finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
-          }
-        } catch (e) {
-          console.warn('Username check failed, using randomized:', e);
+        // Quick check if taken
+        const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername));
+        if (usernameDoc.exists() && usernameDoc.data()?.uid !== user.uid) {
           finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
         }
 
-        console.log('Setting username to:', finalUsername);
-        try {
-          const userRole = 'user';
+        const userRole = 'user';
 
-          await setDoc(doc(db, 'users', user.uid), {
+        // Run both sets in parallel for speed
+        await Promise.all([
+          setDoc(doc(db, 'users', user.uid), {
             uid: user.uid,
             username: finalUsername,
             email: user.email || '',
             photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
             role: userRole,
             createdAt: serverTimestamp()
-          }, { merge: true });
-
-          await setDoc(doc(db, 'usernames', finalUsername), {
+          }, { merge: true }),
+          setDoc(doc(db, 'usernames', finalUsername), {
             uid: user.uid,
-            email: user.email || ''
-          });
-        } catch (writeErr: any) {
-          console.error('Error writing profile:', writeErr);
-          throw new Error(`Failed to create profile: ${writeErr.message}. Please check your internet or contact support.`);
-        }
-
-        console.log('Profile created successfully.');
-        // Force a profile refresh in App.tsx
-        try {
-          await refreshUser();
-        } catch (refreshErr) {
-          console.warn('Refresh user failed, but profile was created:', refreshErr);
-        }
-      } else {
-        console.log('Existing profile found:', userDoc.data()?.username);
-        // Existing user - just refresh profile to be sure
-        try {
-          await refreshUser();
-        } catch (refreshErr) {
-          console.warn('Refresh user failed for existing user:', refreshErr);
-        }
+            email: user.email || '',
+            photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`
+          })
+        ]);
       }
+      // No need to call refreshUser here as App.tsx's onAuthStateChanged will handle it
     } catch (err: any) {
       console.error('Google Login Error:', err);
       if (err.code === 'auth/popup-closed-by-user') {
@@ -279,22 +250,22 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
         const userRole = 'user';
 
-        await setDoc(doc(db, 'users', currentUser.uid), {
-          uid: currentUser.uid,
-          username: sanitizedUsername,
-          email: currentUser.email || cleanEmail,
-          photoURL,
-          avatarType,
-          role: userRole,
-          createdAt: serverTimestamp()
-        }, { merge: true });
-
-        await setDoc(doc(db, 'usernames', sanitizedUsername), {
-          uid: currentUser.uid,
-          email: currentUser.email || cleanEmail
-        });
-
-        await refreshUser();
+        await Promise.all([
+          setDoc(doc(db, 'users', currentUser.uid), {
+            uid: currentUser.uid,
+            username: sanitizedUsername,
+            email: currentUser.email || cleanEmail,
+            photoURL,
+            avatarType,
+            role: userRole,
+            createdAt: serverTimestamp()
+          }, { merge: true }),
+          setDoc(doc(db, 'usernames', sanitizedUsername), {
+            uid: currentUser.uid,
+            email: currentUser.email || cleanEmail,
+            photoURL // Add photoURL for public profile view
+          })
+        ]);
         return;
       }
 
@@ -345,9 +316,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
         const { user } = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
         
-        try {
-          await sendEmailVerification(user);
-        } catch (e) {}
+        // Send verification in background
+        sendEmailVerification(user).catch(() => {});
         
         let avatarStyle = 'avataaars';
         if (avatarType === 'boy') avatarStyle = 'micah';
@@ -356,22 +326,22 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
         const userRole = 'user';
         
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          username: sanitizedUsername,
-          email: cleanEmail,
-          photoURL,
-          avatarType,
-          role: userRole,
-          createdAt: serverTimestamp()
-        });
-
-        await setDoc(doc(db, 'usernames', sanitizedUsername), {
-          uid: user.uid,
-          email: cleanEmail
-        });
-
-        await refreshUser();
+        await Promise.all([
+          setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            username: sanitizedUsername,
+            email: cleanEmail,
+            photoURL,
+            avatarType,
+            role: userRole,
+            createdAt: serverTimestamp()
+          }),
+          setDoc(doc(db, 'usernames', sanitizedUsername), {
+            uid: user.uid,
+            email: cleanEmail,
+            photoURL
+          })
+        ]);
       }
     } catch (err: any) {
       console.error('Auth Error:', err);
@@ -418,11 +388,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         <div className="flex flex-col items-center mb-10">
           <motion.div 
             whileHover={{ scale: 1.1, rotate: 10 }}
-            className="w-16 h-16 gradient-bg rounded-2xl flex items-center justify-center shadow-2xl shadow-purple-500/20 mb-4"
+            className="w-16 h-16 gradient-bg rounded-2xl flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.3)] mb-4"
           >
             <MessageCircle className="w-8 h-8 text-white" />
           </motion.div>
-          <h1 className="text-4xl font-bold tracking-tighter mb-1">
+          <h1 className="text-4xl logo-text mb-1 text-theme">
             Sling
           </h1>
           <p className="text-gray-400 text-center text-sm">
@@ -434,9 +404,9 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           <form onSubmit={handleAuth} className="space-y-5">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-theme">
-                {isFinishingProfile ? 'Finish Profile' : (isLogin ? 'Login' : 'Sign Up')}
+                {isFinishingProfile ? t('app_name') : (isLogin ? t('login') : t('signup'))}
               </h2>
-              <p className="text-gray-500 text-xs mt-1">
+              <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
                 {isFinishingProfile 
                   ? 'Choose a username to complete your setup' 
                   : (isLogin ? 'Enter your credentials to continue' : 'Join Sling to receive anonymous messages')}
@@ -447,6 +417,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
               <button
                 type="button"
                 onClick={handleGoogleLogin}
+                onMouseEnter={prefetchDashboard}
                 disabled={loading}
                 className="w-full bg-white text-black py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-3 hover:bg-gray-100 transition-all disabled:opacity-50 mb-6"
               >
@@ -468,21 +439,21 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Continue with Google
+                {t('continue_google')}
               </button>
             )}
 
             {!isFinishingProfile && (
               <div className="relative flex items-center gap-4 mb-6">
                 <div className="flex-1 h-px bg-white/10" />
-                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">or</span>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-widest">or</span>
                 <div className="flex-1 h-px bg-white/10" />
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                {isLogin ? 'Username or Email' : 'Choose Username'}
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 ml-1 uppercase tracking-wider">
+                {isLogin ? t('username') : t('username')}
               </label>
               <div className="relative">
                 <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -507,8 +478,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
             {!isLogin && !isFinishingProfile && (
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                  Email Address
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 ml-1 uppercase tracking-wider">
+                  {t('email')}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -733,6 +704,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             <button
               type="submit"
               disabled={loading}
+              onMouseEnter={prefetchDashboard}
               className={cn(
                 "w-full gradient-bg py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 mt-4",
                 loading && "animate-pulse"

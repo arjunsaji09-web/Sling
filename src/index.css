@@ -1,7 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Righteous&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Righteous", cursive;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
@@ -18,13 +20,13 @@
   }
 
   .light {
-    --bg-color: #ffffff;
+    --bg-color: #f8fafc;
     --text-color: #0f172a;
-    --glass-bg: rgba(255, 255, 255, 0.7);
-    --glass-border: rgba(0, 0, 0, 0.1);
-    --muted-text: #64748b;
-    --overlay-bg: rgba(255, 255, 255, 0.9);
-    --input-bg: rgba(0, 0, 0, 0.05);
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --muted-text: #475569;
+    --overlay-bg: rgba(255, 255, 255, 0.95);
+    --input-bg: #ffffff;
     color-scheme: light;
   }
 
@@ -75,6 +77,15 @@
   }
   .light .glass-hover:hover {
     background-color: rgba(15, 23, 42, 0.08);
+  }
+
+  .logo-text {
+    @apply font-display tracking-normal;
+    text-shadow: 0 0 20px rgba(168, 85, 247, 0.15);
+  }
+  
+  .light .logo-text {
+    text-shadow: none;
   }
 
   .gradient-text {

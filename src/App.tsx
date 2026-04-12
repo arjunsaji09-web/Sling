@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React, { useState, useEffect, createContext, useContext, ErrorInfo, ReactNode } from 'react';
 import { onAuthStateChanged, User, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -7,11 +7,16 @@ import Login from './pages/Login';
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Profile = React.lazy(() => import('./pages/Profile'));
 const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
+
+// Prefetch components
+const prefetchDashboard = () => import('./pages/Dashboard');
+const prefetchProfile = () => import('./pages/Profile');
 import AdminGuard from './components/AdminGuard';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Mail, LogOut, RefreshCw, CheckCircle, HelpCircle, Sun, Moon } from 'lucide-react';
+import { Mail, LogOut, RefreshCw, CheckCircle, HelpCircle, Sun, Moon, Sparkles } from 'lucide-react';
 import { cn } from './lib/utils';
 import HelpModal from './components/HelpModal';
+import { Language, translations } from './lib/translations';
 
 interface ThemeContextType {
   theme: 'dark' | 'light';
@@ -25,6 +30,20 @@ const ThemeContext = createContext<ThemeContextType>({
 
 export const useTheme = () => useContext(ThemeContext);
 
+interface LanguageContextType {
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: keyof typeof translations['en']) => string;
+}
+
+const LanguageContext = createContext<LanguageContextType>({
+  language: 'en',
+  setLanguage: () => {},
+  t: (key) => key
+});
+
+export const useLanguage = () => useContext(LanguageContext);
+
 interface AuthContextType {
   user: User | null;
   username: string | null;
@@ -32,6 +51,8 @@ interface AuthContextType {
   role: 'user' | 'admin' | null;
   loading: boolean;
   refreshUser: () => Promise<void>;
+  setPhotoURL: (url: string | null) => void;
+  setUsername: (name: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({ 
@@ -40,7 +61,9 @@ const AuthContext = createContext<AuthContextType>({
   photoURL: null, 
   role: null,
   loading: true,
-  refreshUser: async () => {} 
+  refreshUser: async () => {},
+  setPhotoURL: () => {},
+  setUsername: () => {}
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -131,6 +154,16 @@ export default function App() {
     document.documentElement.style.setProperty('--color-scheme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    // Handle legacy hash-based routes for backward compatibility
+    if (window.location.hash) {
+      const hashPath = window.location.hash.replace('#/', '').replace('#', '');
+      if (hashPath && !['login', 'signup', 'dashboard', 'profile'].includes(hashPath)) {
+        window.history.replaceState(null, '', `/${hashPath}`);
+      }
+    }
+  }, []);
+
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [photoURL, setPhotoURL] = useState<string | null>(null);
@@ -144,6 +177,18 @@ export default function App() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [language, setLanguageState] = useState<Language>(() => {
+    return (localStorage.getItem('sling_language') as Language) || 'en';
+  });
+
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    localStorage.setItem('sling_language', lang);
+  };
+
+  const t = (key: keyof typeof translations['en']) => {
+    return translations[language][key] || translations['en'][key] || key;
+  };
 
   // Safe localStorage access
   const safeGetItem = (key: string) => {
@@ -168,7 +213,9 @@ export default function App() {
 
   const fetchUserProfile = async (currentUser: User) => {
     try {
-      console.log('Fetching profile for:', currentUser.uid);
+      // Use a faster query if possible, but getDoc is already direct.
+      // We can skip fetching if we already have it in state and it's recent,
+      // but Firestore's getDoc is usually fast enough.
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       
       if (userDoc.exists()) {
@@ -177,7 +224,6 @@ export default function App() {
         const photo = data.photoURL || null;
         const userRole = data.role || (currentUser.email === 'admin@sling.app' ? 'admin' : 'user');
         
-        console.log('Profile found:', name);
         setUsername(name);
         setPhotoURL(photo);
         setRole(userRole);
@@ -185,17 +231,6 @@ export default function App() {
         if (name) safeSetItem('sling_username', name);
         safeSetItem('sling_role', userRole);
         if (photo) safeSetItem('sling_photo', photo);
-        else safeRemoveItem('sling_photo');
-      } else {
-        console.log('No profile found in Firestore.');
-        const userRole = currentUser.email === 'admin@sling.app' ? 'admin' : null;
-        setUsername(null);
-        setPhotoURL(null);
-        setRole(userRole);
-        safeRemoveItem('sling_username');
-        safeRemoveItem('sling_photo');
-        if (userRole) safeSetItem('sling_role', userRole);
-        else safeRemoveItem('sling_role');
       }
     } catch (err) {
       console.error('Error fetching user document:', err);
@@ -221,51 +256,44 @@ export default function App() {
     if (cachedPhoto) setPhotoURL(cachedPhoto);
     if (cachedRole) setRole(cachedRole as any);
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('Auth state changed:', user ? 'Logged In' : 'Logged Out');
-      setDebugInfo(user ? 'User detected, loading profile...' : 'No user session, redirecting to login...');
-      
-      try {
-        if (user) {
-          setUser(user);
-          // Set loading false as soon as we know we have a user
-          // Profile data can load in background
-          loadingRef.current = false;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUser(user);
+        // Prefetch dashboard as soon as we see a user
+        prefetchDashboard();
+        
+        // Optimistically set loading false if we have cached data
+        if (safeGetItem('sling_username')) {
           setLoading(false);
-          await fetchUserProfile(user);
-        } else {
-          setUser(null);
-          setUsername(null);
-          setPhotoURL(null);
-          setRole(null);
-          safeRemoveItem('sling_username');
-          safeRemoveItem('sling_photo');
-          safeRemoveItem('sling_role');
-          safeRemoveItem('sling_messages');
           loadingRef.current = false;
-          setLoading(false);
         }
-      } catch (err) {
-        console.error('Error in onAuthStateChanged:', err);
-        loadingRef.current = false;
+        fetchUserProfile(user).finally(() => {
+          setLoading(false);
+          loadingRef.current = false;
+        });
+      } else {
+        setUser(null);
+        setUsername(null);
+        setPhotoURL(null);
+        setRole(null);
         setLoading(false);
+        loadingRef.current = false;
+        ['sling_username', 'sling_photo', 'sling_role', 'sling_messages'].forEach(safeRemoveItem);
       }
     }, (error) => {
       console.error('Auth Error:', error);
       setLoadError(`Firebase Auth Error: ${error.message}`);
-      loadingRef.current = false;
       setLoading(false);
+      loadingRef.current = false;
     });
 
     // Check if we can even reach Firebase
     const checkConnection = async () => {
       try {
-        setDebugInfo('Checking Firebase connection...');
-        // A simple check to see if we can reach the auth service
+        // Silent check
         if (!auth.app) {
           throw new Error('Firebase App not initialized');
         }
-        setDebugInfo('Firebase initialized, waiting for auth state...');
       } catch (err: any) {
         setLoadError(`Firebase Init Error: ${err.message}`);
         loadingRef.current = false;
@@ -324,12 +352,12 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-theme text-theme font-sans">
-        <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.2)]">
+        <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.3)]">
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
-        <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
-        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.6)...</p>
-        {debugInfo && <p className="mt-2 text-[10px] text-gray-600 font-mono max-w-xs text-center px-4">{debugInfo}</p>}
+        <h2 className="mt-6 text-2xl logo-text text-theme">Sling</h2>
+        <p className="mt-4 text-gray-500 text-xs font-bold tracking-widest uppercase opacity-50">v1.6</p>
+        {/* Debug info removed for cleaner look */}
         
         {showForceStart && (
           <motion.div 
@@ -481,13 +509,13 @@ export default function App() {
             </button>
 
             <div className="pt-6 border-t border-white/5 mt-6">
-              <button 
-                onClick={() => setShowHelp(true)}
-                className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px] mx-auto"
-              >
-                <HelpCircle className="w-4 h-4" />
-                How to use & Features
-              </button>
+                <button 
+                  onClick={() => setShowHelp(true)}
+                  className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px] mx-auto"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  How to use & Features
+                </button>
             </div>
           </div>
         </motion.div>
@@ -498,9 +526,19 @@ export default function App() {
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      <AuthContext.Provider value={{ user, username, photoURL, role, loading, refreshUser }}>
-        <ErrorBoundary>
-          <Router>
+      <LanguageContext.Provider value={{ language, setLanguage, t }}>
+        <AuthContext.Provider value={{ 
+          user, 
+          username, 
+          photoURL, 
+          role, 
+          loading, 
+          refreshUser,
+          setPhotoURL,
+          setUsername
+        }}>
+          <ErrorBoundary>
+            <Router>
             <React.Suspense fallback={
               <div className="min-h-screen flex flex-col items-center justify-center font-sans" style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-color)' }}>
                 <motion.div 
@@ -508,14 +546,13 @@ export default function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   className="flex flex-col items-center"
                 >
-                  <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.2)] relative overflow-hidden">
+                  <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.3)] relative overflow-hidden">
                     <div className="absolute inset-0 bg-white/10 animate-pulse" />
                     <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin relative z-10" />
                   </div>
-                  <h2 className="mt-6 text-3xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/50">Sling</h2>
-                  <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] uppercase tracking-[0.3em] font-bold">
-                    <div className="w-1 h-1 bg-purple-500 rounded-full animate-ping" />
-                    <span>Securing Session</span>
+                  <h2 className="mt-6 text-3xl logo-text text-theme">Sling</h2>
+                  <div className="mt-4 text-gray-600 text-[10px] font-bold tracking-widest uppercase opacity-50">
+                    v1.6
                   </div>
                 </motion.div>
               </div>
@@ -560,6 +597,7 @@ export default function App() {
           </Router>
         </ErrorBoundary>
       </AuthContext.Provider>
-    </ThemeContext.Provider>
+    </LanguageContext.Provider>
+  </ThemeContext.Provider>
   );
 }

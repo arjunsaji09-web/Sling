@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc, serverTimestamp, getDocs, limit, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, auth, storage } from '../lib/firebase';
-import { useAuth } from '../App';
+import { useAuth, useLanguage } from '../App';
+import { languages } from '../lib/translations';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MessageCircle, 
@@ -27,7 +28,9 @@ import {
   ImageIcon,
   User as UserIcon,
   Shield,
-  HelpCircle
+  HelpCircle,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -51,7 +54,8 @@ interface Message {
 const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 
 export default function Dashboard() {
-  const { user, username, photoURL, role, refreshUser } = useAuth();
+  const { user, username, photoURL, role, refreshUser, setPhotoURL } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
       const cached = localStorage.getItem('sling_messages');
@@ -86,7 +90,13 @@ export default function Dashboard() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const profileUrl = `${window.location.href.split('#')[0]}#/${username}`;
+  useEffect(() => {
+    if (notificationPermission === 'default') {
+      requestNotificationPermission();
+    }
+  }, []);
+
+  const profileUrl = `${window.location.origin}/${username}`;
 
   const [showNotification, setShowNotification] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
@@ -94,6 +104,28 @@ export default function Dashboard() {
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
+
+  const requestNotificationPermission = async () => {
+    if (typeof Notification !== 'undefined') {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    }
+  };
+
+  const showWebNotification = (title: string, body: string) => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification(title, {
+        body,
+        icon: '/favicon.ico', // Fallback to favicon
+        badge: '/favicon.ico',
+        tag: 'new-message'
+      });
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -109,6 +141,8 @@ export default function Dashboard() {
       
       if (lastMessageCount !== null && msgs.length > lastMessageCount) {
         setShowNotification(true);
+        const latestMsg = msgs[0];
+        showWebNotification('New Message on Sling! ✨', latestMsg.text.substring(0, 50) + (latestMsg.text.length > 50 ? '...' : ''));
         setTimeout(() => setShowNotification(false), 5000);
       }
       
@@ -218,15 +252,47 @@ export default function Dashboard() {
     }
   };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(profileUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(profileUrl);
+      setCopied(true);
+      showToast('Link copied to clipboard!', 'success');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      showToast('Failed to copy link', 'error');
+    }
   };
 
-  const shareWhatsApp = () => {
-    const text = `Send me anonymous messages! 👀\n\n${profileUrl}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  const SHARE_PROMPTS = [
+    "Tell me what you really think... 🤫",
+    "Send me a secret confession! ✨",
+    "What's one thing you've never told me? 👀",
+    "I'm ready for the truth. Send me a message! 🔥",
+    "Tell me something I don't know... 👻"
+  ];
+
+  const shareProfile = async () => {
+    const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
+    const fullMessage = `${randomPrompt}\n\n👇 Send me anonymous messages here!\n${profileUrl}`;
+    
+    // Try native share first
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Sling',
+          text: fullMessage
+        });
+        return;
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Share failed:', err);
+        } else {
+          return;
+        }
+      }
+    }
+
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(fullMessage)}`, '_blank');
   };
 
   const deleteMessage = async (id: string) => {
@@ -269,16 +335,22 @@ export default function Dashboard() {
       console.log('Upload Complete');
       
       const url = await getDownloadURL(storageRef);
-      console.log('URL Retrieved:', url);
       
-      await setDoc(doc(db, 'users', user.uid), {
-        photoURL: url
-      }, { merge: true });
-      console.log('Database Updated');
-      
+      // Optimistic UI update
+      setPhotoURL(url);
       localStorage.setItem('sling_photo', url);
-      await refreshUser();
-      showToast('Profile picture updated successfully!', 'success');
+      showToast('Profile picture updated!', 'success');
+
+      await Promise.all([
+        setDoc(doc(db, 'users', user.uid), {
+          photoURL: url
+        }, { merge: true }),
+        setDoc(doc(db, 'usernames', username.toLowerCase()), {
+          photoURL: url
+        }, { merge: true })
+      ]);
+      
+      refreshUser();
     } catch (err: any) {
       console.error('DP Update Error:', err);
       let errorMessage = 'Failed to update profile picture.';
@@ -302,28 +374,80 @@ export default function Dashboard() {
 
   const logout = () => auth.signOut();
 
+  const reportMessage = async (msg: Message) => {
+    if (!user) return;
+    if (!window.confirm(t('report_confirm'))) return;
+
+    try {
+      await addDoc(collection(db, 'reports'), {
+        messageId: msg.id,
+        messageText: msg.text,
+        reportedBy: user.uid,
+        recipientUid: msg.recipientUid,
+        senderUid: msg.senderUid || 'anonymous',
+        createdAt: serverTimestamp(),
+        status: 'pending'
+      });
+      showToast(t('report_success'), 'success');
+    } catch (err) {
+      console.error('Report Error:', err);
+      showToast('Failed to report message', 'error');
+    }
+  };
+
+  const blockUser = async (msg: Message) => {
+    if (!user || !msg.senderUid) {
+      showToast('Cannot block anonymous users without a UID', 'error');
+      return;
+    }
+    if (!window.confirm(t('block_confirm'))) return;
+
+    try {
+      const blockId = `${user.uid}_${msg.senderUid}`;
+      await setDoc(doc(db, 'blocks', blockId), {
+        blockerUid: user.uid,
+        blockedUid: msg.senderUid,
+        createdAt: serverTimestamp()
+      });
+      showToast(t('block_success'), 'success');
+    } catch (err) {
+      console.error('Block Error:', err);
+      showToast('Failed to block user', 'error');
+    }
+  };
+
   const updateAvatarStyle = async (style: 'boy' | 'girl' | 'neutral') => {
     if (!user || !username) return;
     setUpdatingDP(true);
+    
+    let avatarStyle = 'avataaars';
+    if (style === 'boy') avatarStyle = 'micah';
+    if (style === 'girl') avatarStyle = 'lorelei';
+    
+    const newPhotoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${username.toLowerCase()}`;
+    
+    // Optimistic UI update
+    setPhotoURL(newPhotoURL);
+    localStorage.setItem('sling_photo', newPhotoURL);
+    setShowAvatarPicker(false);
+    showToast('Avatar style updated!', 'success');
+
     try {
-      let avatarStyle = 'avataaars';
-      if (style === 'boy') avatarStyle = 'micah';
-      if (style === 'girl') avatarStyle = 'lorelei';
+      await Promise.all([
+        setDoc(doc(db, 'users', user.uid), {
+          photoURL: newPhotoURL,
+          avatarType: style
+        }, { merge: true }),
+        setDoc(doc(db, 'usernames', username.toLowerCase()), {
+          photoURL: newPhotoURL
+        }, { merge: true })
+      ]);
       
-      const newPhotoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${username.toLowerCase()}`;
-      
-      await setDoc(doc(db, 'users', user.uid), {
-        photoURL: newPhotoURL,
-        avatarType: style
-      }, { merge: true });
-      
-      localStorage.setItem('sling_photo', newPhotoURL);
-      await refreshUser();
-      showToast('Avatar style updated!', 'success');
-      setShowAvatarPicker(false);
+      // Background refresh to ensure consistency
+      refreshUser();
     } catch (err: any) {
       console.error('Avatar Update Error:', err);
-      showToast('Failed to update avatar style', 'error');
+      showToast('Failed to sync avatar with server', 'error');
     } finally {
       setUpdatingDP(false);
     }
@@ -453,19 +577,68 @@ export default function Dashboard() {
       {/* Header */}
       <header className="glass sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20">
             <MessageCircle className="w-6 h-6 text-white" />
           </div>
-          <span className="font-bold text-xl tracking-tight">Sling</span>
+          <span className="logo-text text-xl text-theme">Sling</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Language Selector */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowLangMenu(!showLangMenu)}
+              className="p-2 text-gray-400 bg-white/5 hover:bg-white/10 rounded-xl transition-all flex items-center gap-1"
+              title={t('language')}
+            >
+              <span className="text-sm">{languages.find(l => l.code === language)?.flag}</span>
+            </button>
+            
+            <AnimatePresence>
+              {showLangMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-40 glass rounded-2xl p-2 z-[100] shadow-2xl border border-white/10"
+                >
+                  {languages.map((lang) => (
+                    <button
+                      key={lang.code}
+                      onClick={() => {
+                        setLanguage(lang.code as any);
+                        setShowLangMenu(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all",
+                        language === lang.code ? "bg-purple-500/20 text-purple-400 font-bold" : "text-gray-400 hover:bg-white/5"
+                      )}
+                    >
+                      <span>{lang.flag}</span>
+                      <span>{lang.name}</span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <button 
+            onClick={requestNotificationPermission}
+            className={cn(
+              "p-2 rounded-xl transition-all",
+              notificationPermission === 'granted' ? "text-green-400 bg-green-400/10" : "text-gray-400 bg-white/5 hover:bg-white/10"
+            )}
+            title={notificationPermission === 'granted' ? "Notifications Enabled" : "Enable Notifications"}
+          >
+            {notificationPermission === 'granted' ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+          </button>
           <ThemeToggle iconOnly />
           <button 
             onClick={() => setShowHelp(true)}
             className="p-2 text-purple-400 hover:text-purple-300 transition-colors"
             title="How to use & Features"
           >
-            <HelpCircle className="w-5 h-5" />
+            <Sparkles className="w-5 h-5" />
           </button>
           {role === 'admin' && (
             <Link to="/admin-secure-panel" className="p-2 text-purple-400 hover:text-purple-300 transition-colors">
@@ -567,24 +740,39 @@ export default function Dashboard() {
                       <Sparkles className="w-4 h-4" />
                     </button>
                   </div>
-                  <h2 className="text-2xl font-bold mb-1">@{username}</h2>
-                  <p className="text-gray-400 mb-8">Share your link to get messages!</p>
+                  <h2 className="text-2xl font-bold mb-1 text-theme">@{username}</h2>
+                  <p className="text-gray-500 dark:text-gray-400 mb-8">{t('share_to_start')}</p>
 
                   <div className="w-full space-y-3">
-                    <button 
-                      onClick={copyLink}
-                      className="w-full bg-white/5 hover:bg-white/10 border border-white/10 py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
-                    >
-                      {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-purple-400" />}
-                      <span className="font-medium">{copied ? 'Copied Link!' : 'Copy Link'}</span>
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={copyLink}
+                        className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+                      >
+                        {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-purple-400" />}
+                        <span className="font-medium text-theme">{copied ? t('copied') : t('copy_link')}</span>
+                      </button>
+                      
+                      <button 
+                        onClick={async () => {
+                          const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
+                          const text = `${randomPrompt}\n\n${profileUrl}`;
+                          await navigator.clipboard.writeText(text);
+                          showToast('Copied with catchy text! 🔥', 'success');
+                        }}
+                        className="bg-white/5 hover:bg-white/10 border border-white/10 px-4 rounded-2xl flex items-center justify-center transition-all active:scale-[0.98]"
+                        title="Copy with catchy text"
+                      >
+                        <Sparkles className="w-5 h-5 text-yellow-400" />
+                      </button>
+                    </div>
                     
                     <button 
-                      onClick={shareWhatsApp}
+                      onClick={shareProfile}
                       className="w-full gradient-bg py-4 rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
                     >
                       <Share2 className="w-5 h-5" />
-                      <span className="font-bold">Share on WhatsApp</span>
+                      <span className="font-bold">{t('share_profile')}</span>
                     </button>
                   </div>
                 </div>
@@ -592,10 +780,10 @@ export default function Dashboard() {
 
               {/* Messages Section */}
               <div className="flex items-center justify-between mb-6 px-2">
-                <h3 className="text-xl font-bold flex items-center gap-2">
+                <h3 className="text-xl font-bold flex items-center gap-2 text-theme">
                   <MessageCircle className="w-5 h-5 text-purple-400" />
-                  Inbox
-                  <span className="bg-white/10 px-2 py-0.5 rounded-full text-xs font-medium text-gray-400">
+                  {t('inbox')}
+                  <span className="bg-purple-500/10 dark:bg-white/10 px-2 py-0.5 rounded-full text-xs font-medium text-purple-600 dark:text-gray-400">
                     {messages.length}
                   </span>
                 </h3>
@@ -623,9 +811,9 @@ export default function Dashboard() {
                 >
                   <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
                     <Info className="w-8 h-8 text-gray-400" />                  </div>
-                  <h4 className="text-lg font-bold mb-2">No messages yet</h4>
-                  <p className="text-gray-500 text-sm max-w-[200px]">
-                    Share your link with friends to start receiving anonymous messages!
+                  <h4 className="text-lg font-bold mb-2 text-theme">{t('no_messages')}</h4>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm max-w-[200px]">
+                    {t('share_to_start')}
                   </p>
                 </motion.div>
               ) : (
@@ -648,7 +836,7 @@ export default function Dashboard() {
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold text-purple-400">
-                                    From: {msg.senderName || 'Anonymous'}
+                                    {t('from')}: {msg.senderName || t('anonymous')}
                                   </span>
                                   {msg.mode && msg.mode !== 'normal' && (
                                     <span className={cn(
@@ -659,7 +847,7 @@ export default function Dashboard() {
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-gray-500">
+                                <span className="text-[10px] text-gray-500 dark:text-gray-400">
                                   {formatMessageDate(msg.createdAt)} • {msg.deviceInfo || 'Web'}
                                 </span>
                                 {msg.expiresAt && (
@@ -670,7 +858,7 @@ export default function Dashboard() {
                                 )}
                               </div>
                             </div>
-                            <p className="text-lg font-medium leading-relaxed pr-8 mb-4">
+                            <p className="text-lg font-medium leading-relaxed pr-8 mb-4 text-theme">
                               {msg.text}
                             </p>
 
@@ -716,6 +904,25 @@ export default function Dashboard() {
                                 >
                                   <Send className="w-3 h-3" />
                                   Reply
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <button 
+                                  onClick={() => reportMessage(msg)}
+                                  className="flex items-center justify-center gap-2 text-[10px] font-bold text-orange-400 hover:text-orange-300 transition-colors bg-orange-500/10 px-3 py-3 rounded-xl border border-orange-500/20"
+                                >
+                                  <AlertCircle className="w-3 h-3" />
+                                  {t('report')}
+                                </button>
+                                
+                                <button 
+                                  onClick={() => blockUser(msg)}
+                                  disabled={!msg.senderUid}
+                                  className="flex items-center justify-center gap-2 text-[10px] font-bold text-red-400 hover:text-red-300 transition-colors bg-red-500/10 px-3 py-3 rounded-xl border border-red-500/20 disabled:opacity-30 disabled:grayscale"
+                                >
+                                  <Shield className="w-3 h-3" />
+                                  {t('block')}
                                 </button>
                               </div>
 
@@ -924,11 +1131,11 @@ export default function Dashboard() {
       {/* Floating Action Button for Mobile */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 md:hidden">
         <button 
-          onClick={shareWhatsApp}
+          onClick={shareProfile}
           className="gradient-bg px-8 py-4 rounded-full font-bold shadow-2xl shadow-purple-500/40 flex items-center gap-2 active:scale-95 transition-all"
         >
           <Share2 className="w-5 h-5" />
-          Share Link
+          Share Profile
         </button>
       </div>
 

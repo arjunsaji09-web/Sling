@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { collection, query, getDocs, deleteDoc, doc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { motion } from 'framer-motion';
-import { Shield, Users, MessageSquare, Trash2, Search, ArrowLeft } from 'lucide-react';
+import { Shield, Users, MessageSquare, Trash2, Search, ArrowLeft, AlertTriangle, UserX, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'users' | 'messages'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'messages' | 'reports'>('users');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -19,10 +20,14 @@ export default function AdminPanel() {
           const q = query(collection(db, 'users'), limit(50));
           const snapshot = await getDocs(q);
           setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        } else {
+        } else if (activeTab === 'messages') {
           const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(50));
           const snapshot = await getDocs(q);
           setMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        } else if (activeTab === 'reports') {
+          const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'), limit(50));
+          const snapshot = await getDocs(q);
+          setReports(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
         }
       } catch (err) {
         console.error('Error fetching admin data:', err);
@@ -44,11 +49,21 @@ export default function AdminPanel() {
   };
 
   const handleDeleteMessage = async (msgId: string) => {
+    if (!window.confirm('Delete this message?')) return;
     try {
       await deleteDoc(doc(db, 'messages', msgId));
       setMessages(messages.filter(m => m.id !== msgId));
     } catch (err) {
       console.error('Error deleting message:', err);
+    }
+  };
+
+  const handleResolveReport = async (reportId: string) => {
+    try {
+      await deleteDoc(doc(db, 'reports', reportId));
+      setReports(reports.filter(r => r.id !== reportId));
+    } catch (err) {
+      console.error('Error resolving report:', err);
     }
   };
 
@@ -83,6 +98,13 @@ export default function AdminPanel() {
           >
             <MessageSquare className="w-4 h-4" />
             Messages
+          </button>
+          <button 
+            onClick={() => setActiveTab('reports')}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'reports' ? 'bg-orange-500/20 text-orange-400' : 'text-gray-500 hover:text-gray-300'}`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Reports
           </button>
         </div>
 
@@ -133,7 +155,7 @@ export default function AdminPanel() {
                   ))}
                 </tbody>
               </table>
-            ) : (
+            ) : activeTab === 'messages' ? (
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-theme border-b border-white/10">
@@ -162,6 +184,51 @@ export default function AdminPanel() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-theme border-b border-white/10">
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Reported Content</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Sender</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Date</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {reports.map(r => (
+                    <tr key={r.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-medium text-orange-400 mb-1">Message ID: {r.messageId}</p>
+                        <p className="text-sm line-clamp-2 max-w-xs text-theme">{r.messageText}</p>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-400">
+                        {r.senderUid}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {r.createdAt?.toDate?.().toLocaleDateString() || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => handleDeleteMessage(r.messageId)}
+                            title="Delete Message"
+                            className="p-2 text-gray-600 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleResolveReport(r.id)}
+                            title="Resolve Report"
+                            className="p-2 text-gray-600 hover:text-green-400 transition-colors"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, HelpCircle, Sparkles, Shield, Zap, MessageCircle, Database, CheckCircle } from 'lucide-react';
+import { useLanguage } from '../App';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface HelpModalProps {
 }
 
 export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
+  const { t } = useLanguage();
   return (
     <AnimatePresence>
       {isOpen && (
@@ -28,12 +30,12 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
             <div className="p-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center">
-                    <HelpCircle className="w-6 h-6 text-white" />
+                  <div className="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20">
+                    <MessageCircle className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-theme tracking-tight">How to use Sling</h2>
-                    <p className="text-gray-500 text-xs uppercase tracking-widest font-bold">Features & Guide</p>
+                    <h2 className="text-2xl logo-text text-theme">{t('how_to_use')}</h2>
+                    <p className="text-gray-500 text-xs uppercase tracking-widest font-bold">{t('key_features')} & Guide</p>
                   </div>
                 </div>
                 <button 
@@ -49,7 +51,7 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 <section>
                   <h3 className="text-sm font-bold text-purple-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
-                    Key Features
+                    {t('key_features')}
                   </h3>
                   <div className="grid grid-cols-1 gap-4">
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex gap-4">
@@ -57,8 +59,8 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                         <MessageCircle className="w-5 h-5 text-blue-400" />
                       </div>
                       <div>
-                        <h4 className="text-theme font-bold text-sm mb-1">Anonymous Messages</h4>
-                        <p className="text-gray-500 text-xs leading-relaxed">Receive honest feedback, roasts, or flirtatious messages from friends without knowing who sent them.</p>
+                        <h4 className="text-theme font-bold text-sm mb-1">{t('anonymous_messages')}</h4>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{t('share_to_start')}</p>
                       </div>
                     </div>
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex gap-4">
@@ -66,8 +68,8 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                         <Zap className="w-5 h-5 text-pink-400" />
                       </div>
                       <div>
-                        <h4 className="text-theme font-bold text-sm mb-1">Interactive Modes</h4>
-                        <p className="text-gray-500 text-xs leading-relaxed">Switch between Normal, Roast, and Flirt modes to set the vibe for your profile.</p>
+                        <h4 className="text-theme font-bold text-sm mb-1">{t('interactive_modes')}</h4>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{t('interactive_modes')}</p>
                       </div>
                     </div>
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex gap-4">
@@ -75,8 +77,8 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                         <Zap className="w-5 h-5 text-green-400" />
                       </div>
                       <div>
-                        <h4 className="text-theme font-bold text-sm mb-1">Real-time Chat</h4>
-                        <p className="text-gray-500 text-xs leading-relaxed">Reply to anonymous messages and start a conversation while keeping the sender's identity hidden.</p>
+                        <h4 className="text-theme font-bold text-sm mb-1">{t('real_time_chat')}</h4>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{t('real_time_chat')}</p>
                       </div>
                     </div>
                   </div>
@@ -86,20 +88,20 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 <section>
                   <h3 className="text-sm font-bold text-purple-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Zap className="w-4 h-4" />
-                    Getting Started
+                    {t('getting_started')}
                   </h3>
                   <div className="space-y-4">
                     <div className="flex gap-4">
                       <div className="w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-[10px] font-bold text-purple-400 shrink-0">1</div>
-                      <p className="text-gray-400 text-xs leading-relaxed">Create your account and choose a unique username and avatar.</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{t('step_1')}</p>
                     </div>
                     <div className="flex gap-4">
                       <div className="w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-[10px] font-bold text-purple-400 shrink-0">2</div>
-                      <p className="text-gray-400 text-xs leading-relaxed">Copy your profile link and share it on your Instagram bio, WhatsApp, or Snapchat.</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{t('step_2')}</p>
                     </div>
                     <div className="flex gap-4">
                       <div className="w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-[10px] font-bold text-purple-400 shrink-0">3</div>
-                      <p className="text-gray-400 text-xs leading-relaxed">Wait for the messages to roll in! You'll get notified instantly when someone sends a Sling.</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs leading-relaxed">{t('step_3')}</p>
                     </div>
                   </div>
                 </section>
@@ -125,6 +127,14 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                     <li className="flex items-center gap-2 text-[10px] text-gray-500">
                       <CheckCircle className="w-3 h-3 text-green-500" />
                       <span>Encrypted authentication via Firebase</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-[10px] text-gray-500">
+                      <CheckCircle className="w-3 h-3 text-green-500" />
+                      <span>Report & Block system for safety</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-[10px] text-gray-500">
+                      <CheckCircle className="w-3 h-3 text-green-500" />
+                      <span>100 message daily limit per user</span>
                     </li>
                   </ul>
                   <div className="flex items-center justify-between p-3 bg-theme rounded-xl border border-white/5">

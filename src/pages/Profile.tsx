@@ -22,7 +22,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
-import { useAuth } from '../App';
+import { useAuth, useLanguage } from '../App';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
 
@@ -38,6 +38,7 @@ const PROMPTS = [
 
 export default function Profile() {
   const { user: currentUser } = useAuth();
+  const { t } = useLanguage();
   const { username } = useParams<{ username: string }>();
   const [recipientUid, setRecipientUid] = useState<string | null>(null);
   const [recipientPhoto, setRecipientPhoto] = useState<string | null>(null);
@@ -72,23 +73,38 @@ export default function Profile() {
   useEffect(() => {
     const fetchUser = async () => {
       if (!username) return;
+      console.log('Fetching profile for username:', username);
       try {
-        const q = query(collection(db, 'usernames'), where('__name__', '==', username.toLowerCase()), limit(1));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const userData = snapshot.docs[0].data();
+        // Use getDoc directly on the document ID for better performance and reliability
+        // Remove trailing slashes and normalize to lowercase
+        const sanitizedUsername = username.replace(/\/$/, '').toLowerCase();
+        const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
+        
+        if (usernameDoc.exists()) {
+          const userData = usernameDoc.data();
           setRecipientUid(userData.uid);
+          console.log('User found, UID:', userData.uid);
           
-          // Fetch full user profile for DP
-          const userDoc = await getDoc(doc(db, 'users', userData.uid));
-          if (userDoc.exists()) {
-            setRecipientPhoto(userDoc.data().photoURL || null);
+          // Try to get photoURL from username doc first (denormalized)
+          if (userData.photoURL) {
+            setRecipientPhoto(userData.photoURL);
+          } else {
+            // Fallback to fetching from users collection (requires auth)
+            try {
+              const userDoc = await getDoc(doc(db, 'users', userData.uid));
+              if (userDoc.exists()) {
+                setRecipientPhoto(userDoc.data().photoURL || null);
+              }
+            } catch (e) {
+              console.log('Could not fetch public profile from users collection (unauthenticated)');
+            }
           }
         } else {
+          console.warn('Username not found in database:', sanitizedUsername);
           setError('User not found');
         }
       } catch (err) {
-        console.error(err);
+        console.error('Error fetching user:', err);
         setError('Error loading user');
       } finally {
         setLoading(false);
@@ -110,6 +126,28 @@ export default function Profile() {
     setError('');
 
     try {
+      // Check if blocked
+      if (currentUser && recipientUid) {
+        const blockId = `${recipientUid}_${currentUser.uid}`;
+        const blockDoc = await getDoc(doc(db, 'blocks', blockId));
+        if (blockDoc.exists()) {
+          setError('You have been blocked by this user.');
+          setSending(false);
+          return;
+        }
+      }
+
+      // Daily limit check (100 messages)
+      const today = new Date().toISOString().split('T')[0];
+      const limitKey = `sling_limit_${today}`;
+      const sentToday = parseInt(localStorage.getItem(limitKey) || '0');
+      
+      if (sentToday >= 100) {
+        setError(t('rate_limit'));
+        setSending(false);
+        return;
+      }
+
       const expiresAt = selfDestruct ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null;
       
       await addDoc(collection(db, 'messages'), {
@@ -126,6 +164,10 @@ export default function Profile() {
         expiresAt: expiresAt ? Timestamp.fromDate(expiresAt) : null,
         emoji: selectedEmoji
       });
+
+      // Update daily limit
+      localStorage.setItem(limitKey, (sentToday + 1).toString());
+
       setSent(true);
       setMessage('');
       setSenderName('');
@@ -172,15 +214,17 @@ export default function Profile() {
           <ArrowLeft className="w-6 h-6" />
         </Link>
         <div className="flex items-center gap-2">
-          <MessageCircle className="w-6 h-6 text-purple-400" />
-          <span className="font-bold text-lg">Sling</span>
+          <div className="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20">
+            <MessageCircle className="w-6 h-6 text-white" />
+          </div>
+          <span className="logo-text text-lg text-theme">Sling</span>
         </div>
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setShowHelp(true)}
             className="p-2 text-purple-400 hover:text-purple-300 transition-colors"
           >
-            <HelpCircle className="w-6 h-6" />
+            <Sparkles className="w-6 h-6" />
           </button>
         </div>
       </header>
@@ -207,16 +251,16 @@ export default function Profile() {
                     <span className="text-3xl font-bold gradient-text">@{username?.charAt(0)?.toUpperCase() || '?'}</span>
                   )}
                 </div>
-                <h2 className="text-xl font-bold">Send anonymous message to</h2>
+                <h2 className="text-xl font-bold text-theme">{t('send_anonymous')}</h2>
                 <p className="text-purple-400 font-bold text-lg">@{username}</p>
               </div>
 
               <form onSubmit={handleSendMessage} className="space-y-6">
                 {/* Prompts */}
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-1">
                     <Lightbulb className="w-3 h-3" />
-                    Need an idea?
+                    {t('need_idea')}
                   </div>
                   <div className="flex overflow-x-auto pb-2 gap-2 no-scrollbar">
                     {PROMPTS.map((prompt, idx) => (
@@ -229,7 +273,7 @@ export default function Profile() {
                         whileHover={{ scale: 1.05, backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setMessage(prompt)}
-                        className="whitespace-nowrap bg-white/5 border border-white/10 px-4 py-2 rounded-full text-xs font-medium transition-all"
+                        className="whitespace-nowrap bg-white/5 border border-white/10 px-4 py-2 rounded-full text-xs font-medium transition-all text-theme"
                       >
                         {prompt}
                       </motion.button>
@@ -254,7 +298,7 @@ export default function Profile() {
                     )}
                     disabled={sending}
                   />
-                  <div className="absolute bottom-4 right-6 text-xs text-gray-500 font-medium">
+                  <div className="absolute bottom-4 right-6 text-xs text-gray-500 dark:text-gray-400 font-medium">
                     {message.length}/500
                   </div>
                 </div>
@@ -270,7 +314,7 @@ export default function Profile() {
                       mode === 'normal' ? "bg-white/10 text-theme" : "text-gray-500 hover:text-gray-300"
                     )}
                   >
-                    Normal
+                    {t('normal')}
                   </motion.button>
                   <motion.button
                     type="button"
@@ -282,7 +326,7 @@ export default function Profile() {
                     )}
                   >
                     <Flame className={cn("w-3 h-3", mode === 'roast' && "animate-pulse")} />
-                    Roast
+                    {t('roast')}
                   </motion.button>
                   <motion.button
                     type="button"
@@ -294,7 +338,7 @@ export default function Profile() {
                     )}
                   >
                     <HeartIcon className={cn("w-3 h-3", mode === 'flirt' && "animate-bounce")} />
-                    Flirt
+                    {t('flirt')}
                   </motion.button>
                 </div>
 
@@ -376,7 +420,7 @@ export default function Profile() {
                     </span>
                   ) : (
                     <>
-                      {sending ? 'Sending...' : mode === 'roast' ? 'Send Roast 😈' : mode === 'flirt' ? 'Send Love ❤️' : 'Send Anonymously'}
+                      {sending ? t('sending') : t('send')}
                       {!sending && <Send className="w-5 h-5" />}
                     </>
                   )}
