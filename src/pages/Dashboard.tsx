@@ -620,8 +620,7 @@ export default function Dashboard() {
                   className="glass p-12 rounded-[2rem] text-center flex flex-col items-center"
                 >
                   <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
-                    <Info className="w-8 h-8 text-gray-600" />
-                  </div>
+                    <Info className="w-8 h-8 text-gray-400" />                  </div>
                   <h4 className="text-lg font-bold mb-2">No messages yet</h4>
                   <p className="text-gray-500 text-sm max-w-[200px]">
                     Share your link with friends to start receiving anonymous messages!
@@ -814,8 +813,7 @@ export default function Dashboard() {
                           </div>
                           <button 
                             onClick={() => deleteMessage(msg.id)}
-                            className="p-2 text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                          >
+                            className="p-2 text-gray-400 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"                          >
                             <Trash2 className="w-5 h-5" />
                           </button>
                         </div>
@@ -852,8 +850,7 @@ export default function Dashboard() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Enter username..."
                     maxLength={20}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-600"
-                  />
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-400"                  />
                 </div>
 
                 <div className="space-y-4">
@@ -896,8 +893,7 @@ export default function Dashboard() {
                   
                   {searchQuery.length < 2 && (
                     <div className="text-center py-12 flex flex-col items-center">
-                      <Users className="w-12 h-12 text-gray-700 mb-4" />
-                      <p className="text-gray-500 text-sm max-w-[200px]">
+                      <Users className="w-12 h-12 text-gray-500 mb-4" />                      <p className="text-gray-500 text-sm max-w-[200px]">
                         Type at least 2 characters to search for your friends!
                       </p>
                     </div>

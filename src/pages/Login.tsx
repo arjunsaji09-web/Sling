@@ -474,7 +474,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             {!isFinishingProfile && (
               <div className="relative flex items-center gap-4 mb-6">
                 <div className="flex-1 h-px bg-white/10" />
-                <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">or</span>
                 <div className="flex-1 h-px bg-white/10" />
               </div>
             )}
@@ -491,7 +491,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder={isLogin ? "yourname or email@example.com" : "yourname"}
                   maxLength={isLogin ? 50 : 20}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
                   disabled={loading}
                 />
                 {!isLogin && !isFinishingProfile && username.length >= 3 && (
@@ -516,7 +516,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="email@example.com"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
                     disabled={loading}
                   />
                 </div>
@@ -573,7 +573,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     placeholder="••••••••"
                     autoComplete={isLogin ? "current-password" : "new-password"}
                     onKeyUp={checkCapsLock}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
                     disabled={loading}
                   />
                   <button
@@ -653,7 +653,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="••••••••"
                         onKeyUp={checkCapsLock}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
                         disabled={loading}
                       />
                       <button

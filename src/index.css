@@ -6,14 +6,19 @@
 }
 
 @layer base {
+  html {
+    color-scheme: dark;
+  }
   body {
     @apply bg-[#0a0a0a] text-white font-sans antialiased;
+    color: white;
+    background-color: #0a0a0a;
   }
 }
 
 @layer components {
   .glass {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+    @apply bg-white/[0.07] backdrop-blur-xl border border-white/15;
   }
   
   .glass-hover {

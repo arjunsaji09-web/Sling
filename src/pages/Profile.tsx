@@ -246,7 +246,7 @@ export default function Profile() {
                       "Send me anonymous messages! 👀"
                     }
                     className={cn(
-                      "w-full bg-white/5 border border-white/10 rounded-3xl p-6 min-h-[160px] focus:outline-none focus:ring-2 transition-all text-white placeholder:text-gray-600 resize-none text-lg leading-relaxed",
+                      "w-full bg-white/5 border border-white/10 rounded-3xl p-6 min-h-[160px] focus:outline-none focus:ring-2 transition-all text-white placeholder:text-gray-400 resize-none text-lg leading-relaxed",
                       mode === 'roast' ? "focus:ring-orange-500/50" : 
                       mode === 'flirt' ? "focus:ring-pink-500/50" : 
                       "focus:ring-purple-500/50"
@@ -336,7 +336,7 @@ export default function Profile() {
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value.slice(0, 30))}
                     placeholder="Your Name or Hint (Optional)"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-600"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-400"
                     disabled={sending}
                   />
                 </div>
