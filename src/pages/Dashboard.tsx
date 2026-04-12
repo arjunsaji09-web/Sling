@@ -540,14 +540,14 @@ export default function Dashboard() {
                       <AnimatePresence>
                         {showAvatarPicker && (
                           <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-2 gap-2"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-2 gap-2 backdrop-blur-sm"
                           >
-                            <button onClick={() => updateAvatarStyle('boy')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👦 Boy</button>
-                            <button onClick={() => updateAvatarStyle('girl')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👧 Girl</button>
-                            <button onClick={() => updateAvatarStyle('neutral')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👤 Neutral</button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('boy')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👦 Boy</motion.button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('girl')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👧 Girl</motion.button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('neutral')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👤 Neutral</motion.button>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -676,14 +676,16 @@ export default function Dashboard() {
                             {/* Reactions */}
                             <div className="flex flex-wrap gap-2 mb-4">
                               {['❤️', '😂', '😳', '🔥'].map(emoji => (
-                                <button
+                                <motion.button
                                   key={emoji}
+                                  whileHover={{ scale: 1.1 }}
+                                  whileTap={{ scale: 0.9 }}
                                   onClick={() => reactToMessage(msg.id, emoji)}
                                   className="bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1 rounded-full text-xs flex items-center gap-1 transition-all"
                                 >
                                   <span>{emoji}</span>
                                   <span className="text-gray-400 font-bold">{msg.reactions?.[emoji] || 0}</span>
-                                </button>
+                                </motion.button>
                               ))}
                             </div>
 
@@ -718,21 +720,26 @@ export default function Dashboard() {
 
                               {/* AI Smart Replies - Vertical List */}
                               <div className="flex flex-col gap-2 mt-1">
-                                {getSmartReplies(msg.text).map(reply => (
-                                  <button
+                                {getSmartReplies(msg.text).map((reply, idx) => (
+                                  <motion.button
                                     key={reply}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    whileHover={{ x: 5, backgroundColor: 'rgba(168, 85, 247, 0.1)' }}
+                                    whileTap={{ scale: 0.98 }}
                                     onClick={() => {
                                       setReplyingTo(msg.id);
                                       setReplyText(reply);
                                     }}
-                                    className="w-full bg-purple-500/5 hover:bg-purple-500/10 border border-purple-500/10 px-4 py-3 rounded-xl text-xs font-medium text-purple-400/80 transition-all flex items-center justify-between group"
+                                    className="w-full bg-purple-500/5 border border-purple-500/10 px-4 py-3 rounded-xl text-xs font-medium text-purple-400/80 transition-all flex items-center justify-between group"
                                   >
                                     <span className="truncate flex items-center gap-2">
                                       <Sparkles className="w-3 h-3 opacity-50" />
                                       AI: "{reply}"
                                     </span>
                                     <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </button>
+                                  </motion.button>
                                 ))}
                               </div>
                             </div>

@@ -218,15 +218,20 @@ export default function Profile() {
                     Need an idea?
                   </div>
                   <div className="flex overflow-x-auto pb-2 gap-2 no-scrollbar">
-                    {PROMPTS.map(prompt => (
-                      <button
+                    {PROMPTS.map((prompt, idx) => (
+                      <motion.button
                         key={prompt}
                         type="button"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: idx * 0.05 }}
+                        whileHover={{ scale: 1.05, backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => setMessage(prompt)}
-                        className="whitespace-nowrap bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-full text-xs font-medium transition-all"
+                        className="whitespace-nowrap bg-white/5 border border-white/10 px-4 py-2 rounded-full text-xs font-medium transition-all"
                       >
                         {prompt}
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </div>
@@ -254,39 +259,42 @@ export default function Profile() {
                 </div>
 
                 {/* Mode Toggle */}
-                <div className="flex bg-white/5 p-1 rounded-2xl gap-1">
-                  <button
+                <div className="flex bg-white/5 p-1 rounded-2xl gap-1 relative overflow-hidden">
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => setMode('normal')}
                     className={cn(
-                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative z-10",
                       mode === 'normal' ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
                     )}
                   >
                     Normal
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => setMode('roast')}
                     className={cn(
-                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative z-10",
                       mode === 'roast' ? "bg-orange-500/20 text-orange-400" : "text-gray-500 hover:text-orange-400/50"
                     )}
                   >
-                    <Flame className="w-3 h-3" />
+                    <Flame className={cn("w-3 h-3", mode === 'roast' && "animate-pulse")} />
                     Roast
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => setMode('flirt')}
                     className={cn(
-                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                      "flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative z-10",
                       mode === 'flirt' ? "bg-pink-500/20 text-pink-400" : "text-gray-500 hover:text-pink-400/50"
                     )}
                   >
-                    <HeartIcon className="w-3 h-3" />
+                    <HeartIcon className={cn("w-3 h-3", mode === 'flirt' && "animate-bounce")} />
                     Flirt
-                  </button>
+                  </motion.button>
                 </div>
 
                 {/* Self Destruct Toggle */}
