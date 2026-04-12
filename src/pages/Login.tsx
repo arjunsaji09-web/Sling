@@ -778,7 +778,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           </div>
         </div>
 
-        <p className="mt-10 text-center text-gray-600 text-xs flex flex-col gap-4 items-center">
+        <div className="mt-10 text-center text-gray-600 text-xs flex flex-col gap-4 items-center">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setShowHelp(true)}
@@ -795,7 +795,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           >
             Trouble logging in? Reset App
           </button>
-        </p>
+        </div>
       </motion.div>
 
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />

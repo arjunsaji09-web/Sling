@@ -110,6 +110,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [showForceStart, setShowForceStart] = useState(false);
   const loadingRef = React.useRef(true);
 
   const [isVerifying, setIsVerifying] = useState(false);
@@ -192,10 +193,15 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('Auth state changed:', user ? 'Logged In' : 'Logged Out');
+      setDebugInfo(user ? 'User detected, loading profile...' : 'No user session, redirecting to login...');
       
       try {
         if (user) {
           setUser(user);
+          // Set loading false as soon as we know we have a user
+          // Profile data can load in background
+          loadingRef.current = false;
+          setLoading(false);
           await fetchUserProfile(user);
         } else {
           setUser(null);
@@ -206,10 +212,11 @@ export default function App() {
           safeRemoveItem('sling_photo');
           safeRemoveItem('sling_role');
           safeRemoveItem('sling_messages');
+          loadingRef.current = false;
+          setLoading(false);
         }
       } catch (err) {
         console.error('Error in onAuthStateChanged:', err);
-      } finally {
         loadingRef.current = false;
         setLoading(false);
       }
@@ -243,11 +250,10 @@ export default function App() {
     const safetyTimeout = setTimeout(() => {
       if (loadingRef.current) {
         console.warn('Loading safety timeout reached');
-        const currentUrl = window.location.href;
         setLoadError(`Connection Timeout. \n\nDomain: ${window.location.hostname}\n\nTroubleshooting:\n1. Ensure "${window.location.hostname}" is added to "Authorized Domains" in Firebase Authentication.\n2. Check if your internet is stable.\n3. Try clearing your browser cache.`);
         setLoading(false);
       }
-    }, 20000);
+    }, 12000);
 
     return () => {
       unsubscribe();
@@ -278,6 +284,13 @@ export default function App() {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => setShowForceStart(true), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-white font-sans">
@@ -287,6 +300,20 @@ export default function App() {
         <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
         <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.5)...</p>
         {debugInfo && <p className="mt-2 text-[10px] text-gray-700 font-mono">{debugInfo}</p>}
+        
+        {showForceStart && (
+          <motion.button 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => {
+              loadingRef.current = false;
+              setLoading(false);
+            }}
+            className="mt-8 text-gray-600 text-[10px] uppercase tracking-widest hover:text-gray-400 transition-colors font-bold"
+          >
+            Taking too long? Force Start
+          </motion.button>
+        )}
       </div>
     );
   }
