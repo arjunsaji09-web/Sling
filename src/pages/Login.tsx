@@ -13,9 +13,10 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { useAuth } from '../App';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail, Eye, EyeOff, HelpCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
+import HelpModal from '../components/HelpModal';
 
 interface LoginProps {
   isLoginMode?: boolean;
@@ -35,6 +36,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const [isCapsLockOn, setIsCapsLockOn] = useState(false);
 
@@ -228,7 +230,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     setSuccess('');
     try {
       await sendPasswordResetEmail(auth, targetEmail);
-      setSuccess(`A secure password reset link has been sent to ${targetEmail}. Please check your inbox and follow the instructions to regain access.`);
+      setSuccess(`A secure password reset link has been sent to ${targetEmail}. Please check your inbox (and spam folder) and follow the instructions to regain access.`);
       setError('');
     } catch (err: any) {
       setError(err.message || 'We encountered an issue sending the reset email. Please try again later.');
@@ -522,6 +524,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                       src={`https://api.dicebear.com/7.x/${avatarType === 'boy' ? 'micah' : avatarType === 'girl' ? 'lorelei' : 'avataaars'}/svg?seed=${username || 'preview'}`} 
                       alt="Avatar Preview" 
                       className="w-full h-full object-cover"
+                      loading="lazy"
                     />
                   </div>
                   <div className="flex gap-2 w-full">
@@ -679,7 +682,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     <p className="text-green-400 text-xs font-bold uppercase tracking-wider mb-1">Check your email</p>
                     <p className="text-gray-400 text-[11px] leading-relaxed">
                       We've sent a professional reset link to <span className="text-white font-medium">{success.split('sent to ')[1]?.split('!')[0]}</span>. 
-                      It should arrive in 1-2 minutes.
+                      It should arrive in 1-2 minutes. <span className="text-purple-400 font-bold">Check your spam folder if you don't see it!</span>
                     </p>
                     <button 
                       type="button"
@@ -772,20 +775,19 @@ export default function Login({ isLoginMode = true }: LoginProps) {
               <ShieldCheck className="w-3 h-3" />
               <span>Secure Authentication</span>
             </div>
-            
-            {isLogin && (
-              <div className="p-4 bg-purple-500/5 rounded-2xl border border-purple-500/10 text-center">
-                <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider mb-1">Admin Access</p>
-                <p className="text-[9px] text-gray-500 leading-relaxed">
-                  To access the Admin Panel, sign in with your registered admin email.<br/>
-                  Once logged in, the admin dashboard will appear in your profile menu.
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
         <p className="mt-10 text-center text-gray-600 text-xs flex flex-col gap-4 items-center">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setShowHelp(true)}
+              className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px]"
+            >
+              <HelpCircle className="w-4 h-4" />
+              How to use & Features
+            </button>
+          </div>
           <span>Sling uses end-to-end encryption for your privacy.</span>
           <button 
             onClick={handleResetApp}
@@ -795,6 +797,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           </button>
         </p>
       </motion.div>
+
+      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
 }

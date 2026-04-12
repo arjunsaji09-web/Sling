@@ -9,8 +9,9 @@ const Profile = React.lazy(() => import('./pages/Profile'));
 const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
 import AdminGuard from './components/AdminGuard';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Mail, LogOut, RefreshCw, CheckCircle } from 'lucide-react';
+import { Mail, LogOut, RefreshCw, CheckCircle, HelpCircle } from 'lucide-react';
 import { cn } from './lib/utils';
+import HelpModal from './components/HelpModal';
 
 interface AuthContextType {
   user: User | null;
@@ -113,6 +114,7 @@ export default function App() {
 
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Safe localStorage access
   const safeGetItem = (key: string) => {
@@ -338,6 +340,10 @@ export default function App() {
           <p className="text-gray-400 mb-8">
             We've sent a verification link to <span className="text-white font-medium">{user.email}</span>. 
             Please check your inbox and click the link to activate your account.
+            <br/><br/>
+            <span className="text-purple-400 font-bold text-xs uppercase tracking-widest">⚠️ Check your spam folder!</span>
+            <br/>
+            <span className="text-[10px] text-gray-500">Sometimes verification emails are filtered as spam.</span>
           </p>
           
           <div className="space-y-4">
@@ -411,8 +417,19 @@ export default function App() {
               <LogOut className="w-4 h-4" />
               Logout and try another account
             </button>
+
+            <div className="pt-6 border-t border-white/5 mt-6">
+              <button 
+                onClick={() => setShowHelp(true)}
+                className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px] mx-auto"
+              >
+                <HelpCircle className="w-4 h-4" />
+                How to use & Features
+              </button>
+            </div>
           </div>
         </motion.div>
+        <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       </div>
     );
   }

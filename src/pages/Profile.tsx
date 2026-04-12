@@ -19,9 +19,11 @@ import {
   Flame,
   Heart as HeartIcon,
   Clock,
+  HelpCircle
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { useAuth } from '../App';
+import HelpModal from '../components/HelpModal';
 
 const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻', '😂', '💀', '🥺', '🤯'];
 
@@ -48,6 +50,7 @@ export default function Profile() {
   const [mode, setMode] = useState<'normal' | 'roast' | 'flirt'>('normal');
   const [cooldown, setCooldown] = useState(0);
   const [selfDestruct, setSelfDestruct] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (cooldown > 0) {
@@ -171,7 +174,14 @@ export default function Profile() {
           <MessageCircle className="w-6 h-6 text-purple-400" />
           <span className="font-bold text-lg">Sling</span>
         </div>
-        <div className="w-10" /> {/* Spacer */}
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="p-2 text-purple-400 hover:text-purple-300 transition-colors"
+          >
+            <HelpCircle className="w-6 h-6" />
+          </button>
+        </div>
       </header>
 
       <motion.div 
@@ -191,7 +201,7 @@ export default function Profile() {
               <div className="flex flex-col items-center mb-8">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-2 border-white/10 flex items-center justify-center mb-4 overflow-hidden">
                   {recipientPhoto ? (
-                    <img src={recipientPhoto} alt={username} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img src={recipientPhoto} alt={username} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
                   ) : (
                     <span className="text-3xl font-bold gradient-text">@{username?.charAt(0)?.toUpperCase() || '?'}</span>
                   )}
@@ -410,6 +420,8 @@ export default function Profile() {
           </p>
         </div>
       </motion.div>
+
+      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
 }

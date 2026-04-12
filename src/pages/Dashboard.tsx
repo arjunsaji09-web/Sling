@@ -26,10 +26,12 @@ import {
   Camera,
   ImageIcon,
   User as UserIcon,
-  Shield
+  Shield,
+  HelpCircle
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
+import HelpModal from '../components/HelpModal';
 
 interface Message {
   id: string;
@@ -90,6 +92,7 @@ export default function Dashboard() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -455,6 +458,13 @@ export default function Dashboard() {
           <span className="font-bold text-xl tracking-tight">Sling</span>
         </div>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="p-2 text-purple-400 hover:text-purple-300 transition-colors"
+            title="How to use & Features"
+          >
+            <HelpCircle className="w-5 h-5" />
+          </button>
           {(role === 'admin' || user?.email?.toLowerCase() === 'arjunsaji09@gmail.com') && (
             <Link to="/admin-secure-panel" className="p-2 text-purple-400 hover:text-purple-300 transition-colors">
               <Shield className="w-5 h-5" />
@@ -521,7 +531,7 @@ export default function Dashboard() {
                   <div className="relative group mb-4">
                     <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-2 border-white/10 flex items-center justify-center overflow-hidden relative group">
                       {photoURL ? (
-                        <img src={photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <img src={photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
                       ) : (
                         <span className="text-4xl font-bold gradient-text">@{username?.charAt(0)?.toUpperCase() || '?'}</span>
                       )}
@@ -980,6 +990,8 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
 }
