@@ -239,11 +239,16 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           }
           
           const usernameData = usernameDoc.data();
-          loginEmail = usernameData.email;
+          if (usernameData.email) {
+            loginEmail = usernameData.email;
+          } else {
+            // Fallback for legacy accounts created before email was required
+            loginEmail = `${sanitizedUsername}@sling.app`;
+          }
         }
 
         if (!loginEmail) {
-          setError('Could not find an email associated with this username. Please try using your email address.');
+          setError('Could not find an email associated with this username. If you created your account recently, please use your email address.');
           setLoading(false);
           return;
         }
@@ -259,12 +264,20 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           return;
         }
 
+        console.log('Creating Firebase Auth user...');
         const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        console.log('Auth user created:', user.uid);
         
-        // Send verification email
-        await sendEmailVerification(user);
+        // Send verification email - wrap in try/catch so it doesn't block profile creation
+        try {
+          console.log('Sending verification email...');
+          await sendEmailVerification(user);
+        } catch (verifyErr) {
+          console.warn('Verification email failed to send:', verifyErr);
+        }
         
         // Create user profile
+        console.log('Creating Firestore profile...');
         let avatarStyle = 'avataaars';
         if (gender === 'boy') avatarStyle = 'micah';
         if (gender === 'girl') avatarStyle = 'lorelei';
@@ -274,34 +287,50 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         // Check if this is the admin email
         const userRole = email.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
         
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          username: sanitizedUsername,
-          email: email,
-          photoURL,
-          avatarType: gender,
-          role: userRole,
-          createdAt: serverTimestamp()
-        });
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            username: sanitizedUsername,
+            email: email,
+            photoURL,
+            avatarType: gender,
+            role: userRole,
+            createdAt: serverTimestamp()
+          });
 
-        // Reserve username
-        await setDoc(doc(db, 'usernames', sanitizedUsername), {
-          uid: user.uid,
-          email: email
-        });
+          // Reserve username
+          await setDoc(doc(db, 'usernames', sanitizedUsername), {
+            uid: user.uid,
+            email: email
+          });
+          console.log('Firestore profile created successfully.');
+        } catch (dbErr: any) {
+          console.error('Database Error during signup:', dbErr);
+          throw new Error(`Account created but profile setup failed: ${dbErr.message}. Please try logging in.`);
+        }
 
-        await refreshUser();
+        try {
+          // Wait a moment for auth state to propagate
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await refreshUser();
+        } catch (refreshErr) {
+          console.warn('Refresh user failed after signup:', refreshErr);
+        }
       }
     } catch (err: any) {
       console.error('Auth Error Details:', err);
+      setLoading(false); // Ensure loading is off on error
+      
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError('Invalid username or password. Please check your credentials.');
       } else if (err.code === 'auth/email-already-in-use') {
         setError('This email is already registered. Please go to the Login tab and sign in, or use "Forgot Password" if you lost your access.');
       } else if (err.code === 'auth/invalid-email') {
-        setError('The email address is not valid.');
+        setError('The email address is not valid. Please check for typos.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password is too weak. Please use at least 6 characters.');
       } else if (err.code === 'auth/network-request-failed') {
-        setError('Network error. Please check your internet connection.');
+        setError('Network error. Please check your internet connection and try again.');
       } else if (err.code === 'auth/too-many-requests') {
         setError('Too many failed attempts. Please try again later.');
       } else if (err.message && err.message.includes('permission')) {
@@ -309,7 +338,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       } else {
         setError(err.message || 'Authentication failed. Please try again.');
       }
-      setLoading(false);
     }
   };
 
@@ -400,6 +428,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   }}
                   placeholder={isLogin ? "yourname or email@example.com" : "yourname"}
                   maxLength={isLogin ? 50 : 20}
+                  autoComplete={isLogin ? "username" : "off"}
                   className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                   disabled={loading}
                 />
@@ -418,6 +447,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="email@example.com"
+                    autoComplete="email"
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                     disabled={loading}
                   />
@@ -474,6 +504,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                   className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                   disabled={loading}
                 />

@@ -203,6 +203,8 @@ export default function App() {
 
     checkConnection();
 
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
     const safetyTimeout = setTimeout(() => {
       if (loadingRef.current) {
         console.warn('Loading safety timeout reached');
@@ -215,8 +217,13 @@ export default function App() {
     return () => {
       unsubscribe();
       clearTimeout(safetyTimeout);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
+
+  const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+    console.error('Unhandled Rejection:', event.reason);
+  };
 
   if (loading) {
     return (
