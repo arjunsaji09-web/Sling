@@ -252,10 +252,10 @@ export default function App() {
     const safetyTimeout = setTimeout(() => {
       if (loadingRef.current) {
         console.warn('Loading safety timeout reached');
-        setLoadError(`Connection Timeout. \n\nDomain: ${window.location.hostname}\n\nTroubleshooting:\n1. Ensure "${window.location.hostname}" is added to "Authorized Domains" in Firebase Authentication.\n2. Check if your internet is stable.\n3. Try clearing your browser cache.`);
+        setLoadError(`Connection Timeout. \n\nDomain: ${window.location.hostname}\n\nTroubleshooting:\n1. Ensure "${window.location.hostname}" is added to "Authorized Domains" in Firebase Authentication.\n2. Check if your internet is stable.\n3. Try clearing your browser cache.\n4. If you are on GitHub Pages, ensure your vite.config.ts has base: './'`);
         setLoading(false);
       }
-    }, 12000);
+    }, 15000);
 
     return () => {
       unsubscribe();
@@ -288,7 +288,7 @@ export default function App() {
 
   useEffect(() => {
     if (loading) {
-      const timer = setTimeout(() => setShowForceStart(true), 6000);
+      const timer = setTimeout(() => setShowForceStart(true), 4000);
       return () => clearTimeout(timer);
     }
   }, [loading]);
@@ -300,21 +300,26 @@ export default function App() {
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
         <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
-        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.5)...</p>
-        {debugInfo && <p className="mt-2 text-[10px] text-gray-700 font-mono">{debugInfo}</p>}
+        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.6)...</p>
+        {debugInfo && <p className="mt-2 text-[10px] text-gray-600 font-mono max-w-xs text-center px-4">{debugInfo}</p>}
         
         {showForceStart && (
-          <motion.button 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => {
-              loadingRef.current = false;
-              setLoading(false);
-            }}
-            className="mt-8 text-gray-600 text-[10px] uppercase tracking-widest hover:text-gray-400 transition-colors font-bold"
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center gap-4 mt-8"
           >
-            Taking too long? Force Start
-          </motion.button>
+            <button 
+              onClick={() => {
+                loadingRef.current = false;
+                setLoading(false);
+              }}
+              className="bg-white/5 border border-white/10 px-6 py-3 rounded-xl text-purple-400 text-xs uppercase tracking-widest hover:bg-white/10 transition-all font-bold"
+            >
+              Force Start App
+            </button>
+            <p className="text-[9px] text-gray-700 uppercase tracking-tighter">Click if stuck for more than 5 seconds</p>
+          </motion.div>
         )}
       </div>
     );
