@@ -82,12 +82,14 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
             </button>
             <button 
               onClick={() => {
+                signOut(auth);
                 localStorage.clear();
                 window.location.href = '/';
               }}
-              className="text-gray-500 text-sm font-bold hover:text-gray-300"
+              className="text-gray-500 text-sm font-bold hover:text-gray-300 flex items-center justify-center gap-2"
             >
-              Clear Cache & Logout
+              <LogOut className="w-4 h-4" />
+              Sign Out & Reset
             </button>
           </div>
         </div>
@@ -110,23 +112,26 @@ export default function App() {
 
   const fetchUserProfile = async (currentUser: User) => {
     try {
+      console.log('Fetching profile for:', currentUser.uid);
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       
       if (userDoc.exists()) {
         const data = userDoc.data();
-        const name = data.username;
+        const name = data.username || null;
         const photo = data.photoURL || null;
         const userRole = data.role || 'user';
         
+        console.log('Profile found:', name);
         setUsername(name);
         setPhotoURL(photo);
         setRole(userRole);
         
-        localStorage.setItem('sling_username', name);
+        if (name) localStorage.setItem('sling_username', name);
         localStorage.setItem('sling_role', userRole);
         if (photo) localStorage.setItem('sling_photo', photo);
         else localStorage.removeItem('sling_photo');
       } else {
+        console.log('No profile found in Firestore.');
         setUsername(null);
         setPhotoURL(null);
         setRole(null);
@@ -233,8 +238,8 @@ export default function App() {
           <div className="w-10 h-10 text-amber-500 text-2xl flex items-center justify-center">⏳</div>
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">Connection Timeout</h2>
-        <p className="text-gray-400 mb-8 max-w-md">{loadError}</p>
-        <div className="flex flex-col gap-4 w-full max-w-xs">
+        <p className="text-gray-400 mb-8 max-w-md whitespace-pre-wrap">{loadError}</p>
+        <div className="flex flex-col gap-4 w-full max-w-xs mx-auto">
           <button 
             onClick={() => window.location.reload()}
             className="gradient-bg px-8 py-3 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20"
@@ -242,12 +247,55 @@ export default function App() {
             Try Again
           </button>
           <button 
-            onClick={() => setLoadError(null)}
-            className="text-gray-500 text-sm font-bold hover:text-gray-300"
+            onClick={() => {
+              signOut(auth);
+              setLoadError(null);
+            }}
+            className="text-gray-500 text-sm font-bold hover:text-gray-300 flex items-center justify-center gap-2"
           >
-            Continue to Login
+            <LogOut className="w-4 h-4" />
+            Sign Out & Reset
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Logged in but no profile (Half-logged-in state)
+  if (user && !username && !loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-6 text-center">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-full max-w-md glass p-8 rounded-[2rem]"
+        >
+          <div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+            <RefreshCw className="w-10 h-10 text-purple-500 animate-spin" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Completing Setup</h2>
+          <p className="text-gray-400 mb-8">
+            We're finishing setting up your profile. If this takes too long, please try signing out and back in.
+          </p>
+          
+          <div className="space-y-4">
+            <button 
+              onClick={() => refreshUser()}
+              className="w-full gradient-bg py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry Setup
+            </button>
+            
+            <button 
+              onClick={() => signOut(auth)}
+              className="w-full flex items-center justify-center gap-2 text-gray-600 text-sm hover:text-gray-400 transition-colors pt-4"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </div>
+        </motion.div>
       </div>
     );
   }

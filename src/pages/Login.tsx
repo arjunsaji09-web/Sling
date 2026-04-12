@@ -38,11 +38,15 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   }, [isLoginMode]);
 
   const handleGoogleLogin = async () => {
+    if (loading) return;
     console.log('Starting Google Login...');
     setLoading(true);
     setError('');
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection to avoid "automatic" login issues
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
       console.log('Calling signInWithPopup...');
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
