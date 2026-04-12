@@ -32,6 +32,7 @@ import {
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
+import ThemeToggle from '../components/ThemeToggle';
 
 interface Message {
   id: string;
@@ -405,7 +406,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] pb-20">
+    <div className="min-h-screen bg-theme pb-20">
       {/* Notification */}
       <AnimatePresence>
         {showNotification && (
@@ -458,6 +459,7 @@ export default function Dashboard() {
           <span className="font-bold text-xl tracking-tight">Sling</span>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle iconOnly />
           <button 
             onClick={() => setShowHelp(true)}
             className="p-2 text-purple-400 hover:text-purple-300 transition-colors"
@@ -470,7 +472,7 @@ export default function Dashboard() {
               <Shield className="w-5 h-5" />
             </Link>
           )}
-          <button onClick={logout} className="p-2 text-gray-400 hover:text-white transition-colors">
+          <button onClick={logout} className="p-2 text-gray-400 hover:text-theme transition-colors">
             <LogOut className="w-5 h-5" />
           </button>
         </div>
@@ -478,7 +480,7 @@ export default function Dashboard() {
 
       <main className="max-w-2xl mx-auto px-6 pt-8">
         {/* Tabs */}
-        <div className="flex bg-white/5 p-1 rounded-2xl mb-8 relative">
+        <div className="flex bg-theme p-1 rounded-2xl mb-8 relative border border-white/5">
           <button 
             onClick={() => {
               setActiveTab('inbox');
@@ -486,13 +488,13 @@ export default function Dashboard() {
             }}
             className={cn(
               "flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all relative",
-              activeTab === 'inbox' ? "bg-white/10 text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
+              activeTab === 'inbox' ? "bg-white/10 text-theme shadow-lg" : "text-gray-500 hover:text-gray-300"
             )}
           >
             <MessageCircle className="w-4 h-4" />
             Inbox
             {showNotification && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-[#0a0a0a] animate-bounce">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-theme animate-bounce">
                 !
               </span>
             )}
@@ -501,7 +503,7 @@ export default function Dashboard() {
             onClick={() => setActiveTab('friends')}
             className={cn(
               "flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all",
-              activeTab === 'friends' ? "bg-white/10 text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
+              activeTab === 'friends' ? "bg-white/10 text-theme shadow-lg" : "text-gray-500 hover:text-gray-300"
             )}
           >
             <Users className="w-4 h-4" />
@@ -543,7 +545,7 @@ export default function Dashboard() {
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.8 }}
-                            className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-2 gap-2 backdrop-blur-sm"
+                            className="absolute inset-0 overlay flex flex-col items-center justify-center p-2 gap-2"
                           >
                             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('boy')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👦 Boy</motion.button>
                             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('girl')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👧 Girl</motion.button>
@@ -553,7 +555,7 @@ export default function Dashboard() {
                       </AnimatePresence>
 
                       {updatingDP && (
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
+                        <div className="absolute inset-0 overlay flex flex-col items-center justify-center">
                           <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1" />
                         </div>
                       )}
@@ -750,7 +752,7 @@ export default function Dashboard() {
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: 'auto' }}
                                   exit={{ opacity: 0, height: 0 }}
-                                  className="mt-4 space-y-3 bg-white/5 p-4 rounded-2xl border border-white/10"
+                                  className="mt-4 space-y-3 bg-theme p-4 rounded-2xl border border-white/10"
                                 >
                                   {!msg.senderUid ? (
                                     <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-xs text-orange-400 flex items-center gap-3">
@@ -765,7 +767,7 @@ export default function Dashboard() {
                                           value={replyText}
                                           onChange={(e) => setReplyText(e.target.value)}
                                           placeholder="Type your reply..."
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl py-4 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-white"
+                                          className="w-full input-theme rounded-xl py-4 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                                           autoFocus
                                         />
                                       </div>
@@ -850,7 +852,7 @@ export default function Dashboard() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Enter username..."
                     maxLength={20}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-400"                  />
+                    className="w-full input-theme rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-400"                  />
                 </div>
 
                 <div className="space-y-4">
@@ -937,7 +939,7 @@ export default function Dashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 overlay"
             onClick={() => setSelectedMessage(null)}
           >
             <motion.div 

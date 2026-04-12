@@ -53,7 +53,7 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-6">
+    <div className="min-h-screen bg-theme text-theme p-6">
       <header className="max-w-6xl mx-auto flex items-center justify-between mb-12">
         <div className="flex items-center gap-4">
           <Link to="/dashboard" className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
@@ -69,17 +69,17 @@ export default function AdminPanel() {
       </header>
 
       <main className="max-w-6xl mx-auto">
-        <div className="flex bg-white/5 p-1 rounded-2xl mb-8 w-fit">
+        <div className="flex bg-theme p-1 rounded-2xl mb-8 w-fit border border-white/5">
           <button 
             onClick={() => setActiveTab('users')}
-            className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'users' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'users' ? 'bg-white/10 text-theme' : 'text-gray-500 hover:text-gray-300'}`}
           >
             <Users className="w-4 h-4" />
             Users
           </button>
           <button 
             onClick={() => setActiveTab('messages')}
-            className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'messages' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'messages' ? 'bg-white/10 text-theme' : 'text-gray-500 hover:text-gray-300'}`}
           >
             <MessageSquare className="w-4 h-4" />
             Messages
@@ -95,7 +95,7 @@ export default function AdminPanel() {
             {activeTab === 'users' ? (
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-white/5 border-b border-white/10">
+                  <tr className="bg-theme border-b border-white/10">
                     <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">User</th>
                     <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Role</th>
                     <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Joined</th>
@@ -114,7 +114,7 @@ export default function AdminPanel() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-gray-400'}`}>
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-theme border border-white/5 text-gray-400'}`}>
                           {u.role || 'user'}
                         </span>
                       </td>
@@ -136,7 +136,7 @@ export default function AdminPanel() {
             ) : (
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-white/5 border-b border-white/10">
+                  <tr className="bg-theme border-b border-white/10">
                     <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Message</th>
                     <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Recipient</th>
                     <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Sent</th>

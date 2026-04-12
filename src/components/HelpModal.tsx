@@ -17,13 +17,13 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            className="absolute inset-0 overlay"
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="relative w-full max-w-lg bg-[#121212] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl"
+            className="relative w-full max-w-lg bg-theme border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl"
           >
             <div className="p-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
               <div className="flex items-center justify-between mb-8">
@@ -32,7 +32,7 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                     <HelpCircle className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white tracking-tight">How to use Sling</h2>
+                    <h2 className="text-2xl font-bold text-theme tracking-tight">How to use Sling</h2>
                     <p className="text-gray-500 text-xs uppercase tracking-widest font-bold">Features & Guide</p>
                   </div>
                 </div>
@@ -57,7 +57,7 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                         <MessageCircle className="w-5 h-5 text-blue-400" />
                       </div>
                       <div>
-                        <h4 className="text-white font-bold text-sm mb-1">Anonymous Messages</h4>
+                        <h4 className="text-theme font-bold text-sm mb-1">Anonymous Messages</h4>
                         <p className="text-gray-500 text-xs leading-relaxed">Receive honest feedback, roasts, or flirtatious messages from friends without knowing who sent them.</p>
                       </div>
                     </div>
@@ -66,7 +66,7 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                         <Zap className="w-5 h-5 text-pink-400" />
                       </div>
                       <div>
-                        <h4 className="text-white font-bold text-sm mb-1">Interactive Modes</h4>
+                        <h4 className="text-theme font-bold text-sm mb-1">Interactive Modes</h4>
                         <p className="text-gray-500 text-xs leading-relaxed">Switch between Normal, Roast, and Flirt modes to set the vibe for your profile.</p>
                       </div>
                     </div>
@@ -75,7 +75,7 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                         <Zap className="w-5 h-5 text-green-400" />
                       </div>
                       <div>
-                        <h4 className="text-white font-bold text-sm mb-1">Real-time Chat</h4>
+                        <h4 className="text-theme font-bold text-sm mb-1">Real-time Chat</h4>
                         <p className="text-gray-500 text-xs leading-relaxed">Reply to anonymous messages and start a conversation while keeping the sender's identity hidden.</p>
                       </div>
                     </div>
@@ -90,15 +90,15 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                   </h3>
                   <div className="space-y-4">
                     <div className="flex gap-4">
-                      <div className="w-6 h-6 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0">1</div>
+                      <div className="w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-[10px] font-bold text-purple-400 shrink-0">1</div>
                       <p className="text-gray-400 text-xs leading-relaxed">Create your account and choose a unique username and avatar.</p>
                     </div>
                     <div className="flex gap-4">
-                      <div className="w-6 h-6 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0">2</div>
+                      <div className="w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-[10px] font-bold text-purple-400 shrink-0">2</div>
                       <p className="text-gray-400 text-xs leading-relaxed">Copy your profile link and share it on your Instagram bio, WhatsApp, or Snapchat.</p>
                     </div>
                     <div className="flex gap-4">
-                      <div className="w-6 h-6 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0">3</div>
+                      <div className="w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center text-[10px] font-bold text-purple-400 shrink-0">3</div>
                       <p className="text-gray-400 text-xs leading-relaxed">Wait for the messages to roll in! You'll get notified instantly when someone sends a Sling.</p>
                     </div>
                   </div>
@@ -127,10 +127,10 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       <span>Encrypted authentication via Firebase</span>
                     </li>
                   </ul>
-                  <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                  <div className="flex items-center justify-between p-3 bg-theme rounded-xl border border-white/5">
                     <div className="flex items-center gap-2">
                       <Shield className="w-4 h-4 text-purple-400" />
-                      <span className="text-[10px] font-bold text-white uppercase tracking-wider">Storage Permission</span>
+                      <span className="text-[10px] font-bold text-theme uppercase tracking-wider">Storage Permission</span>
                     </div>
                     <div className="text-[10px] text-green-500 font-bold uppercase tracking-widest">Granted</div>
                   </div>

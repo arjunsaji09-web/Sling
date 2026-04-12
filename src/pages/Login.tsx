@@ -17,6 +17,7 @@ import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail, E
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
+import ThemeToggle from '../components/ThemeToggle';
 
 interface LoginProps {
   isLoginMode?: boolean;
@@ -404,7 +405,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#0a0a0a] relative">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-theme relative">
       {/* Background Glow */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[80px] rounded-full" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-pink-600/10 blur-[80px] rounded-full" />
@@ -432,7 +433,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         <div className="glass p-8 rounded-[2rem]">
           <form onSubmit={handleAuth} className="space-y-5">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-theme">
                 {isFinishingProfile ? 'Finish Profile' : (isLogin ? 'Login' : 'Sign Up')}
               </h2>
               <p className="text-gray-500 text-xs mt-1">
@@ -491,7 +492,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder={isLogin ? "yourname or email@example.com" : "yourname"}
                   maxLength={isLogin ? 50 : 20}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
+                  className="w-full input-theme rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
                   disabled={loading}
                 />
                 {!isLogin && !isFinishingProfile && username.length >= 3 && (
@@ -516,7 +517,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="email@example.com"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
+                    className="w-full input-theme rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
                     disabled={loading}
                   />
                 </div>
@@ -525,7 +526,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
             {!isLogin && (
               <div className="space-y-4 mb-4">
-                <div className="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10">
+                <div className="flex flex-col items-center gap-3 p-4 bg-theme rounded-2xl border border-white/10">
                   <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden border-2 border-white/10">
                     <img 
                       src={`https://api.dicebear.com/7.x/${avatarType === 'boy' ? 'micah' : avatarType === 'girl' ? 'lorelei' : 'avataaars'}/svg?seed=${username || 'preview'}`} 
@@ -573,7 +574,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     placeholder="••••••••"
                     autoComplete={isLogin ? "current-password" : "new-password"}
                     onKeyUp={checkCapsLock}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
+                    className="w-full input-theme rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
                     disabled={loading}
                   />
                   <button
@@ -653,7 +654,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="••••••••"
                         onKeyUp={checkCapsLock}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-500"
+                        className="w-full input-theme rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
                         disabled={loading}
                       />
                       <button
@@ -786,14 +787,15 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         </div>
 
         <div className="mt-10 text-center text-gray-600 text-xs flex flex-col gap-4 items-center">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             <button 
               onClick={() => setShowHelp(true)}
               className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px]"
             >
               <HelpCircle className="w-4 h-4" />
-              How to use & Features
+              How to use
             </button>
+            <ThemeToggle />
           </div>
           <span>Sling uses end-to-end encryption for your privacy.</span>
           <button 

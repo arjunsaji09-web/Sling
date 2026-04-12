@@ -9,9 +9,21 @@ const Profile = React.lazy(() => import('./pages/Profile'));
 const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
 import AdminGuard from './components/AdminGuard';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Mail, LogOut, RefreshCw, CheckCircle, HelpCircle } from 'lucide-react';
+import { Mail, LogOut, RefreshCw, CheckCircle, HelpCircle, Sun, Moon } from 'lucide-react';
 import { cn } from './lib/utils';
 import HelpModal from './components/HelpModal';
+
+interface ThemeContextType {
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextType>({
+  theme: 'dark',
+  toggleTheme: () => {}
+});
+
+export const useTheme = () => useContext(ThemeContext);
 
 interface AuthContextType {
   user: User | null;
@@ -69,11 +81,11 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       }
 
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-6 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-theme p-6 text-center">
           <div className="w-20 h-20 bg-red-500/20 rounded-2xl flex items-center justify-center mb-6">
             <div className="w-10 h-10 text-red-500 text-2xl flex items-center justify-center">⚠️</div>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Oops! Something went wrong</h2>
+          <h2 className="text-2xl font-bold text-theme mb-2">Oops! Something went wrong</h2>
           <p className="text-gray-400 mb-8 max-w-md">{errorMessage}</p>
           <div className="flex flex-col gap-4 w-full max-w-xs mx-auto">
             <button 
@@ -103,6 +115,22 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 export default function App() {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('sling_theme') as 'dark' | 'light') || 'dark';
+  });
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('sling_theme', newTheme);
+  };
+
+  useEffect(() => {
+    document.documentElement.classList.remove('dark', 'light');
+    document.documentElement.classList.add(theme);
+    document.documentElement.style.setProperty('--color-scheme', theme);
+  }, [theme]);
+
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [photoURL, setPhotoURL] = useState<string | null>(null);
@@ -295,7 +323,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-white font-sans">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-theme text-theme font-sans">
         <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.2)]">
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
@@ -327,11 +355,11 @@ export default function App() {
 
   if (loadError && !user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-6 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-theme p-6 text-center">
         <div className="w-20 h-20 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-6">
           <div className="w-10 h-10 text-amber-500 text-2xl flex items-center justify-center">⏳</div>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Connection Timeout</h2>
+        <h2 className="text-2xl font-bold text-theme mb-2">Connection Timeout</h2>
         <p className="text-gray-400 mb-8 max-w-md whitespace-pre-wrap">{loadError}</p>
         <div className="flex flex-col gap-4 w-full max-w-xs mx-auto">
           <button 
@@ -361,7 +389,7 @@ export default function App() {
   // Email Verification Screen
   if (user && user.email && !user.emailVerified) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-6 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-theme p-6 text-center">
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -370,7 +398,7 @@ export default function App() {
           <div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
             <Mail className="w-10 h-10 text-purple-500" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Verify your email</h2>
+          <h2 className="text-2xl font-bold text-theme mb-2">Verify your email</h2>
           <p className="text-gray-400 mb-8">
             We've sent a verification link to <span className="text-white font-medium">{user.email}</span>. 
             Please check your inbox and click the link to activate your account.
@@ -469,67 +497,69 @@ export default function App() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, username, photoURL, role, loading, refreshUser }}>
-      <ErrorBoundary>
-        <Router>
-          <React.Suspense fallback={
-            <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-white font-sans">
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex flex-col items-center"
-              >
-                <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.2)] relative overflow-hidden">
-                  <div className="absolute inset-0 bg-white/10 animate-pulse" />
-                  <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin relative z-10" />
-                </div>
-                <h2 className="mt-6 text-3xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/50">Sling</h2>
-                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] uppercase tracking-[0.3em] font-bold">
-                  <div className="w-1 h-1 bg-purple-500 rounded-full animate-ping" />
-                  <span>Securing Session</span>
-                </div>
-              </motion.div>
-            </div>
-          }>
-            <AnimatePresence mode="wait">
-              <Routes>
-                <Route path="/login" element={
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                    {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={true} />}
-                  </motion.div>
-                } />
-                <Route path="/signup" element={
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                    {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={false} />}
-                  </motion.div>
-                } />
-                <Route path="/" element={
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                    {user && username ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
-                  </motion.div>
-                } />
-                <Route path="/dashboard" element={
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                    {user && username ? <Dashboard /> : <Navigate to="/login" />}
-                  </motion.div>
-                } />
-                <Route path="/admin-secure-panel" element={
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                    <AdminGuard>
-                      <AdminPanel />
-                    </AdminGuard>
-                  </motion.div>
-                } />
-                <Route path="/:username" element={
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                    <Profile />
-                  </motion.div>
-                } />
-              </Routes>
-            </AnimatePresence>
-          </React.Suspense>
-        </Router>
-      </ErrorBoundary>
-    </AuthContext.Provider>
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      <AuthContext.Provider value={{ user, username, photoURL, role, loading, refreshUser }}>
+        <ErrorBoundary>
+          <Router>
+            <React.Suspense fallback={
+              <div className="min-h-screen flex flex-col items-center justify-center font-sans" style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-color)' }}>
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex flex-col items-center"
+                >
+                  <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.2)] relative overflow-hidden">
+                    <div className="absolute inset-0 bg-white/10 animate-pulse" />
+                    <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin relative z-10" />
+                  </div>
+                  <h2 className="mt-6 text-3xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/50">Sling</h2>
+                  <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] uppercase tracking-[0.3em] font-bold">
+                    <div className="w-1 h-1 bg-purple-500 rounded-full animate-ping" />
+                    <span>Securing Session</span>
+                  </div>
+                </motion.div>
+              </div>
+            }>
+              <AnimatePresence mode="wait">
+                <Routes>
+                  <Route path="/login" element={
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                      {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={true} />}
+                    </motion.div>
+                  } />
+                  <Route path="/signup" element={
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                      {user && username ? <Navigate to="/dashboard" /> : <Login isLoginMode={false} />}
+                    </motion.div>
+                  } />
+                  <Route path="/" element={
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                      {user && username ? <Navigate to="/dashboard" /> : <Navigate to="/login" />}
+                    </motion.div>
+                  } />
+                  <Route path="/dashboard" element={
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                      {user && username ? <Dashboard /> : <Navigate to="/login" />}
+                    </motion.div>
+                  } />
+                  <Route path="/admin-secure-panel" element={
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                      <AdminGuard>
+                        <AdminPanel />
+                      </AdminGuard>
+                    </motion.div>
+                  } />
+                  <Route path="/:username" element={
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                      <Profile />
+                    </motion.div>
+                  } />
+                </Routes>
+              </AnimatePresence>
+            </React.Suspense>
+          </Router>
+        </ErrorBoundary>
+      </AuthContext.Provider>
+    </ThemeContext.Provider>
   );
 }

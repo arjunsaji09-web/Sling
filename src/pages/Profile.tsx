@@ -24,6 +24,7 @@ import {
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { useAuth } from '../App';
 import HelpModal from '../components/HelpModal';
+import ThemeToggle from '../components/ThemeToggle';
 
 const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻', '😂', '💀', '🥺', '🤯'];
 
@@ -161,7 +162,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] p-6 flex flex-col items-center relative overflow-hidden">
+    <div className="min-h-screen bg-theme p-6 flex flex-col items-center relative overflow-hidden">
       {/* Background Glow */}
       <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-pink-600/10 blur-[120px] rounded-full" />
@@ -246,7 +247,7 @@ export default function Profile() {
                       "Send me anonymous messages! 👀"
                     }
                     className={cn(
-                      "w-full bg-white/5 border border-white/10 rounded-3xl p-6 min-h-[160px] focus:outline-none focus:ring-2 transition-all text-white placeholder:text-gray-400 resize-none text-lg leading-relaxed",
+                      "w-full input-theme rounded-3xl p-6 min-h-[160px] focus:outline-none focus:ring-2 transition-all placeholder:text-gray-400 resize-none text-lg leading-relaxed",
                       mode === 'roast' ? "focus:ring-orange-500/50" : 
                       mode === 'flirt' ? "focus:ring-pink-500/50" : 
                       "focus:ring-purple-500/50"
@@ -259,14 +260,14 @@ export default function Profile() {
                 </div>
 
                 {/* Mode Toggle */}
-                <div className="flex bg-white/5 p-1 rounded-2xl gap-1 relative overflow-hidden">
+                <div className="flex bg-theme p-1 rounded-2xl gap-1 relative overflow-hidden border border-white/5">
                   <motion.button
                     type="button"
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setMode('normal')}
                     className={cn(
                       "flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative z-10",
-                      mode === 'normal' ? "bg-white/10 text-white" : "text-gray-500 hover:text-gray-300"
+                      mode === 'normal' ? "bg-white/10 text-theme" : "text-gray-500 hover:text-gray-300"
                     )}
                   >
                     Normal
@@ -298,7 +299,7 @@ export default function Profile() {
                 </div>
 
                 {/* Self Destruct Toggle */}
-                <div className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/5">
+                <div className="flex items-center justify-between bg-theme p-4 rounded-2xl border border-white/5">
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
@@ -336,7 +337,7 @@ export default function Profile() {
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value.slice(0, 30))}
                     placeholder="Your Name or Hint (Optional)"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-400"
+                    className="w-full input-theme rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-400"
                     disabled={sending}
                   />
                 </div>
@@ -405,7 +406,7 @@ export default function Profile() {
               <div className="space-y-4">
                 <button 
                   onClick={() => setSent(false)}
-                  className="w-full bg-white/5 hover:bg-white/10 border border-white/10 py-4 rounded-2xl font-bold transition-all"
+                  className="w-full bg-theme hover:bg-white/5 border border-white/10 py-4 rounded-2xl font-bold transition-all"
                 >
                   Send Another
                 </button>
@@ -421,8 +422,18 @@ export default function Profile() {
           )}
         </AnimatePresence>
 
-        <div className="mt-12 text-center">
-          <p className="text-gray-600 text-sm flex items-center justify-center gap-2">
+        <div className="mt-12 text-center flex flex-col items-center gap-6">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={() => setShowHelp(true)}
+              className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px]"
+            >
+              <HelpCircle className="w-4 h-4" />
+              How to use
+            </button>
+            <ThemeToggle />
+          </div>
+          <p className="text-theme text-sm flex items-center justify-center gap-2 opacity-60">
             <Info className="w-4 h-4" />
             Messages are deleted after 30 days.
           </p>

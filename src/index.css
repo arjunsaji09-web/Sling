@@ -6,23 +6,75 @@
 }
 
 @layer base {
-  html {
+  :root {
+    --bg-color: #0a0a0a;
+    --text-color: #ffffff;
+    --glass-bg: rgba(255, 255, 255, 0.07);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --muted-text: #6b7280;
+    --overlay-bg: rgba(0, 0, 0, 0.8);
+    --input-bg: rgba(255, 255, 255, 0.05);
     color-scheme: dark;
   }
+
+  .light {
+    --bg-color: #ffffff;
+    --text-color: #0f172a;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --muted-text: #64748b;
+    --overlay-bg: rgba(255, 255, 255, 0.9);
+    --input-bg: rgba(0, 0, 0, 0.05);
+    color-scheme: light;
+  }
+
+  html {
+    color-scheme: var(--color-scheme, dark);
+    background-color: var(--bg-color);
+  }
+  
   body {
-    @apply bg-[#0a0a0a] text-white font-sans antialiased;
-    color: white;
-    background-color: #0a0a0a;
+    @apply font-sans antialiased;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
 @layer components {
   .glass {
-    @apply bg-white/[0.07] backdrop-blur-xl border border-white/15;
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+  }
+
+  .overlay {
+    background-color: var(--overlay-bg);
+    backdrop-filter: blur(8px);
+  }
+
+  .bg-theme {
+    background-color: var(--bg-color);
+  }
+
+  .text-theme {
+    color: var(--text-color);
+  }
+
+  .input-theme {
+    background-color: var(--input-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-color);
   }
   
   .glass-hover {
-    @apply hover:bg-white/10 transition-all duration-300;
+    @apply transition-all duration-300;
+  }
+  .glass-hover:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  .light .glass-hover:hover {
+    background-color: rgba(15, 23, 42, 0.08);
   }
 
   .gradient-text {
