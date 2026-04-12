@@ -113,12 +113,13 @@ export default function Dashboard() {
       setLastMessageCount(msgs.length);
       setLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'messages');
+      // Don't throw here to prevent app crash, just log and set loading false
+      console.error('Dashboard Snapshot Error:', error);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user, lastMessageCount]);
+  }, [user]); // Removed lastMessageCount from dependencies
 
   useEffect(() => {
         const searchUsers = async () => {

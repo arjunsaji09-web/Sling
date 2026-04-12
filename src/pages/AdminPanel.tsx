@@ -35,7 +35,6 @@ export default function AdminPanel() {
   }, [activeTab]);
 
   const handleDeleteUser = async (userId: string) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
     try {
       await deleteDoc(doc(db, 'users', userId));
       setUsers(users.filter(u => u.id !== userId));
@@ -45,7 +44,6 @@ export default function AdminPanel() {
   };
 
   const handleDeleteMessage = async (msgId: string) => {
-    if (!window.confirm('Are you sure you want to delete this message?')) return;
     try {
       await deleteDoc(doc(db, 'messages', msgId));
       setMessages(messages.filter(m => m.id !== msgId));

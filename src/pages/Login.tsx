@@ -5,14 +5,15 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signOut
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { useAuth } from '../App';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
@@ -21,23 +22,69 @@ interface LoginProps {
 }
 
 export default function Login({ isLoginMode = true }: LoginProps) {
-  const { refreshUser } = useAuth();
+  const { user: currentUser, username: profileUsername, refreshUser } = useAuth();
   const [isLogin, setIsLogin] = useState(isLoginMode);
+  const [isFinishingProfile, setIsFinishingProfile] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [gender, setGender] = useState<'boy' | 'girl' | 'neutral'>('neutral');
+  const [avatarType, setAvatarType] = useState<'boy' | 'girl' | 'neutral'>('neutral');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | React.ReactNode>('');
   const [success, setSuccess] = useState('');
-  const [profilePic, setProfilePic] = useState<File | null>(null);
-  const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkUsername = async () => {
+      if (isLogin || isFinishingProfile || username.length < 3) {
+        setIsUsernameAvailable(null);
+        return;
+      }
+      
+      const sanitized = username.trim().toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
+      if (!sanitized) return;
+
+      try {
+        const docRef = doc(db, 'usernames', sanitized);
+        const docSnap = await getDoc(docRef);
+        setIsUsernameAvailable(!docSnap.exists());
+      } catch (err) {
+        console.error('Error checking username:', err);
+      }
+    };
+
+    const timer = setTimeout(checkUsername, 500);
+    return () => clearTimeout(timer);
+  }, [username, isLogin, isFinishingProfile]);
 
   useEffect(() => {
     setIsLogin(isLoginMode);
     setError('');
   }, [isLoginMode]);
+
+  useEffect(() => {
+    // If user is logged in but has no profile username, switch to finishing profile mode
+    if (currentUser && !profileUsername) {
+      setIsFinishingProfile(true);
+      setIsLogin(false);
+      if (currentUser.email) setEmail(currentUser.email);
+    } else if (currentUser && profileUsername) {
+      // If we have both, we shouldn't be here, but just in case
+      setIsFinishingProfile(false);
+    }
+  }, [currentUser, profileUsername]);
+
+  const handleResetApp = () => {
+    try {
+      signOut(auth);
+      localStorage.clear();
+      window.location.reload();
+    } catch (e) {
+      window.location.reload();
+    }
+  };
 
   const handleGoogleLogin = async () => {
     if (loading) return;
@@ -140,41 +187,41 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
   const formatEmail = (user: string) => `${user.toLowerCase()}@sling.app`;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setError('Profile picture must be under 2MB');
-        return;
-      }
-      setProfilePic(file);
-      setProfilePicPreview(URL.createObjectURL(file));
-    }
-  };
-
   const isStrongPassword = (pass: string) => {
-    const minLength = 8;
-    const hasUpperCase = /[A-Z]/.test(pass);
-    const hasLowerCase = /[a-z]/.test(pass);
-    const hasNumber = /[0-9]/.test(pass);
-    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(pass);
-    return pass.length >= minLength && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar;
+    return pass.length >= 6; // Simplified for smoother experience
   };
 
   const handleForgotPassword = async () => {
-    if (!email || !email.includes('@')) {
-      setError('Please enter your email address first to reset your password.');
+    let targetEmail = email;
+    
+    if (!targetEmail && username && !username.includes('@')) {
+      setLoading(true);
+      try {
+        const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
+        const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
+        if (usernameDoc.exists()) {
+          targetEmail = usernameDoc.data().email;
+        }
+      } catch (e) {
+        console.error('Username lookup failed:', e);
+      }
+    }
+
+    if (!targetEmail || !targetEmail.includes('@')) {
+      setError('Please enter your registered email address or username to reset your password.');
+      setLoading(false);
       return;
     }
+
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await sendPasswordResetEmail(auth, email);
-      setSuccess('Password reset link sent to your email!');
+      await sendPasswordResetEmail(auth, targetEmail);
+      setSuccess(`A secure password reset link has been sent to ${targetEmail}. Please check your inbox and follow the instructions to regain access.`);
+      setError('');
     } catch (err: any) {
-      console.error('Reset Error:', err);
-      setError(err.message || 'Failed to send reset email.');
+      setError(err.message || 'We encountered an issue sending the reset email. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -183,80 +230,90 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     
-    if (!isLogin && (!email || !email.includes('@'))) {
+    const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
+    const isEmailInput = username.includes('@');
+
+    if (!isLogin && !isFinishingProfile && (!email || !email.includes('@'))) {
       setError('Please enter a valid email address');
       return;
     }
 
-    if (!username || username.length < 3) {
+    if (sanitizedUsername.length < 3 && !isEmailInput) {
       setError('Username must be at least 3 characters');
       return;
     }
     
-    if (!isLogin && !isStrongPassword(password)) {
-      setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character');
+    if (!isLogin && password.length < 6) {
+      setError('Password must be at least 6 characters');
       return;
     }
 
-    if (!isLogin && password !== confirmPassword) {
+    if (!isLogin && !isFinishingProfile && password !== confirmPassword) {
       setError('Passwords do not match');
-      return;
-    }
-
-    if (isLogin && (!password || password.length < 6)) {
-      setError('Invalid password format');
       return;
     }
     
     setLoading(true);
     setError('');
 
-    const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
-    
-    if (sanitizedUsername.length < 3) {
-      setError('Username must be at least 3 characters (alphanumeric only)');
-      setLoading(false);
-      return;
-    }
-
     try {
+      if (isFinishingProfile && currentUser) {
+        console.log('Finishing profile...');
+        let avatarStyle = 'avataaars';
+        if (avatarType === 'boy') avatarStyle = 'micah';
+        if (avatarType === 'girl') avatarStyle = 'lorelei';
+        const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
+        const userRole = currentUser.email?.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
+
+        await setDoc(doc(db, 'users', currentUser.uid), {
+          uid: currentUser.uid,
+          username: sanitizedUsername,
+          email: currentUser.email || email,
+          photoURL,
+          avatarType,
+          role: userRole,
+          createdAt: serverTimestamp()
+        }, { merge: true });
+
+        await setDoc(doc(db, 'usernames', sanitizedUsername), {
+          uid: currentUser.uid,
+          email: currentUser.email || email
+        });
+
+        await refreshUser();
+        return;
+      }
+
       if (isLogin) {
-        // Login
         let loginEmail = '';
-        
-        // Check if input is username or email
-        if (username.includes('@')) {
-          loginEmail = username;
+        if (isEmailInput) {
+          loginEmail = username.trim();
         } else {
-          // Look up email by username
-          // NOTE: We only use the 'usernames' collection because it is publicly readable.
-          // The 'users' collection query requires authentication, so it won't work here.
+          console.log('Attempting username lookup for:', sanitizedUsername);
           const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
           if (!usernameDoc.exists()) {
-            setError('Username not found. If you have an old account, please try logging in with your email address.');
-            setLoading(false);
-            return;
-          }
-          
-          const usernameData = usernameDoc.data();
-          if (usernameData.email) {
-            loginEmail = usernameData.email;
+            // Check if they are trying to login with email but didn't include @
+            // Or if the username doc is missing but user doc exists
+            console.log('Username doc not found, checking users collection...');
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('username', '==', sanitizedUsername));
+            const querySnapshot = await getDocs(q);
+            
+            if (!querySnapshot.empty) {
+              loginEmail = querySnapshot.docs[0].data().email;
+            } else {
+              // Last resort fallback
+              loginEmail = `${sanitizedUsername}@sling.app`;
+            }
           } else {
-            // Fallback for legacy accounts created before email was required
-            loginEmail = `${sanitizedUsername}@sling.app`;
+            loginEmail = usernameDoc.data().email || `${sanitizedUsername}@sling.app`;
           }
         }
 
-        if (!loginEmail) {
-          setError('Could not find an email associated with this username. If you created your account recently, please use your email address.');
-          setLoading(false);
-          return;
-        }
-
+        console.log('Final login email:', loginEmail);
         await signInWithEmailAndPassword(auth, loginEmail, password);
       } else {
         // Sign Up
-        // Check if username is taken in Firestore first
         const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
         if (usernameDoc.exists()) {
           setError('Username is already taken');
@@ -264,77 +321,61 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           return;
         }
 
-        console.log('Creating Firebase Auth user...');
         const { user } = await createUserWithEmailAndPassword(auth, email, password);
-        console.log('Auth user created:', user.uid);
         
-        // Send verification email - wrap in try/catch so it doesn't block profile creation
         try {
-          console.log('Sending verification email...');
           await sendEmailVerification(user);
-        } catch (verifyErr) {
-          console.warn('Verification email failed to send:', verifyErr);
-        }
+        } catch (e) {}
         
-        // Create user profile
-        console.log('Creating Firestore profile...');
         let avatarStyle = 'avataaars';
-        if (gender === 'boy') avatarStyle = 'micah';
-        if (gender === 'girl') avatarStyle = 'lorelei';
+        if (avatarType === 'boy') avatarStyle = 'micah';
+        if (avatarType === 'girl') avatarStyle = 'lorelei';
         
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
-        
-        // Check if this is the admin email
         const userRole = email.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
         
-        try {
-          await setDoc(doc(db, 'users', user.uid), {
-            uid: user.uid,
-            username: sanitizedUsername,
-            email: email,
-            photoURL,
-            avatarType: gender,
-            role: userRole,
-            createdAt: serverTimestamp()
-          });
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          username: sanitizedUsername,
+          email: email,
+          photoURL,
+          avatarType,
+          role: userRole,
+          createdAt: serverTimestamp()
+        });
 
-          // Reserve username
-          await setDoc(doc(db, 'usernames', sanitizedUsername), {
-            uid: user.uid,
-            email: email
-          });
-          console.log('Firestore profile created successfully.');
-        } catch (dbErr: any) {
-          console.error('Database Error during signup:', dbErr);
-          throw new Error(`Account created but profile setup failed: ${dbErr.message}. Please try logging in.`);
-        }
+        await setDoc(doc(db, 'usernames', sanitizedUsername), {
+          uid: user.uid,
+          email: email
+        });
 
-        try {
-          // Wait a moment for auth state to propagate
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await refreshUser();
-        } catch (refreshErr) {
-          console.warn('Refresh user failed after signup:', refreshErr);
-        }
+        await refreshUser();
       }
     } catch (err: any) {
-      console.error('Auth Error Details:', err);
-      setLoading(false); // Ensure loading is off on error
+      console.error('Auth Error:', err);
+      setLoading(false);
       
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setError('Invalid username or password. Please check your credentials.');
+      const isInvalid = err.code === 'auth/user-not-found' || 
+                        err.code === 'auth/wrong-password' || 
+                        err.code === 'auth/invalid-credential' ||
+                        err.code === 'auth/invalid-email';
+
+      if (isInvalid) {
+        setError(
+          <div className="flex flex-col gap-2">
+            <span>Incorrect password or account name. If you signed up with Google, please use the "Continue with Google" button above.</span>
+            <button 
+              onClick={() => handleForgotPassword()}
+              className="text-purple-400 font-bold hover:underline text-left"
+            >
+              Forgot your password? Click here to reset it.
+            </button>
+          </div>
+        );
       } else if (err.code === 'auth/email-already-in-use') {
-        setError('This email is already registered. Please go to the Login tab and sign in, or use "Forgot Password" if you lost your access.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('The email address is not valid. Please check for typos.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('Password is too weak. Please use at least 6 characters.');
-      } else if (err.code === 'auth/network-request-failed') {
-        setError('Network error. Please check your internet connection and try again.');
+        setError('This email is already registered. Please login instead.');
       } else if (err.code === 'auth/too-many-requests') {
-        setError('Too many failed attempts. Please try again later.');
-      } else if (err.message && err.message.includes('permission')) {
-        setError('Database permission error. Please contact support.');
+        setError('Too many failed attempts. Please wait a few minutes or reset your password.');
       } else {
         setError(err.message || 'Authentication failed. Please try again.');
       }
@@ -371,74 +412,81 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           <form onSubmit={handleAuth} className="space-y-5">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-white">
-                {isLogin ? 'Login' : 'Sign Up'}
+                {isFinishingProfile ? 'Finish Profile' : (isLogin ? 'Login' : 'Sign Up')}
               </h2>
               <p className="text-gray-500 text-xs mt-1">
-                {isLogin ? 'Enter your credentials to continue' : 'Join Sling to receive anonymous messages'}
+                {isFinishingProfile 
+                  ? 'Choose a username to complete your setup' 
+                  : (isLogin ? 'Enter your credentials to continue' : 'Join Sling to receive anonymous messages')}
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full bg-white text-black py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-3 hover:bg-gray-100 transition-all disabled:opacity-50 mb-6"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
-              </svg>
-              Continue with Google
-            </button>
+            {!isFinishingProfile && (
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full bg-white text-black py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-3 hover:bg-gray-100 transition-all disabled:opacity-50 mb-6"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  />
+                </svg>
+                Continue with Google
+              </button>
+            )}
 
-            <div className="relative flex items-center gap-4 mb-6">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
-              <div className="flex-1 h-px bg-white/10" />
-            </div>
+            {!isFinishingProfile && (
+              <div className="relative flex items-center gap-4 mb-6">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                {isLogin ? 'Username or Email' : 'Username'}
+                {isLogin ? 'Username or Email' : 'Choose Username'}
               </label>
               <div className="relative">
                 <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    if (e.target.value.includes('@')) {
-                      setEmail(e.target.value);
-                    }
-                  }}
+                  onChange={(e) => setUsername(e.target.value)}
                   placeholder={isLogin ? "yourname or email@example.com" : "yourname"}
                   maxLength={isLogin ? 50 : 20}
-                  autoComplete={isLogin ? "username" : "off"}
                   className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                   disabled={loading}
                 />
+                {!isLogin && !isFinishingProfile && username.length >= 3 && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {isUsernameAvailable === true && <div className="text-green-500 text-[10px] font-bold">Available</div>}
+                    {isUsernameAvailable === false && <div className="text-red-500 text-[10px] font-bold">Taken</div>}
+                    {isUsernameAvailable === null && <div className="w-3 h-3 border-2 border-white/10 border-t-purple-500 rounded-full animate-spin" />}
+                  </div>
+                )}
               </div>
             </div>
 
-            {!isLogin && (
+            {!isLogin && !isFinishingProfile && (
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                  Real Email (for verification)
+                  Email Address
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -447,7 +495,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="email@example.com"
-                    autoComplete="email"
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
                     disabled={loading}
                   />
@@ -460,13 +507,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 <div className="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10">
                   <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden border-2 border-white/10">
                     <img 
-                      src={`https://api.dicebear.com/7.x/${gender === 'boy' ? 'micah' : gender === 'girl' ? 'lorelei' : 'avataaars'}/svg?seed=${username || 'preview'}`} 
+                      src={`https://api.dicebear.com/7.x/${avatarType === 'boy' ? 'micah' : avatarType === 'girl' ? 'lorelei' : 'avataaars'}/svg?seed=${username || 'preview'}`} 
                       alt="Avatar Preview" 
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Choose your style</p>
-                  
                   <div className="flex gap-2 w-full">
                     {[
                       { id: 'boy', label: 'Boy', icon: '👦' },
@@ -476,15 +521,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                       <button
                         key={opt.id}
                         type="button"
-                        onClick={() => setGender(opt.id as any)}
+                        onClick={() => setAvatarType(opt.id as any)}
                         className={cn(
-                          "flex-1 py-2 rounded-xl text-xs font-bold transition-all border",
-                          gender === opt.id 
+                          "flex-1 py-2 rounded-xl text-[10px] font-bold transition-all border",
+                          avatarType === opt.id 
                             ? "bg-purple-500/20 border-purple-500 text-white" 
                             : "bg-white/5 border-white/10 text-gray-500 hover:text-gray-300"
                         )}
                       >
-                        <span className="mr-1">{opt.icon}</span>
                         {opt.label}
                       </button>
                     ))}
@@ -493,101 +537,161 @@ export default function Login({ isLoginMode = true }: LoginProps) {
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete={isLogin ? "current-password" : "new-password"}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
-                  disabled={loading}
-                />
-              </div>
-              {isLogin && (
-                <div className="flex justify-end mt-2">
-                  <button 
+            {!isFinishingProfile && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete={isLogin ? "current-password" : "new-password"}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
+                    disabled={loading}
+                  />
+                  <button
                     type="button"
-                    onClick={handleForgotPassword}
-                    className="text-[10px] text-purple-400 font-bold hover:underline"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors"
                   >
-                    Forgot Password?
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              )}
-              {!isLogin && password && (
-                <div className="mt-3 space-y-2">
-                  <div className="flex gap-1 h-1">
-                    {[1, 2, 3, 4].map((i) => {
-                      const strength = 
-                        (password.length >= 8 ? 1 : 0) +
-                        (/[A-Z]/.test(password) ? 1 : 0) +
-                        (/[0-9]/.test(password) ? 1 : 0) +
-                        (/[!@#$%^&*(),.?":{}|<>]/.test(password) ? 1 : 0);
-                      return (
-                        <div 
-                          key={i}
-                          className={cn(
-                            "flex-1 rounded-full transition-all duration-500",
-                            i <= strength 
-                              ? strength <= 2 ? "bg-red-500" : strength === 3 ? "bg-yellow-500" : "bg-green-500"
-                              : "bg-white/5"
-                          )}
-                        />
-                      );
-                    })}
+                {isLogin && (
+                  <div className="flex justify-end mt-2">
+                    <button 
+                      type="button"
+                      onClick={handleForgotPassword}
+                      className="text-[10px] text-purple-400 font-bold hover:underline"
+                    >
+                      Forgot Password?
+                    </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    <p className={cn("text-[10px] flex items-center gap-1", password.length >= 8 ? "text-green-400" : "text-gray-600")}>
-                      <span className="w-1 h-1 rounded-full bg-current" /> 8+ Characters
+                )}
+                {!isLogin && password && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex gap-1 h-1">
+                      {[1, 2, 3, 4].map((i) => {
+                        const strength = 
+                          (password.length >= 8 ? 1 : 0) +
+                          (/[A-Z]/.test(password) ? 1 : 0) +
+                          (/[0-9]/.test(password) ? 1 : 0) +
+                          (/[!@#$%^&*(),.?":{}|<>]/.test(password) ? 1 : 0);
+                        return (
+                          <div 
+                            key={i}
+                            className={cn(
+                              "flex-1 rounded-full transition-all duration-500",
+                              i <= strength 
+                                ? strength <= 2 ? "bg-red-500" : strength === 3 ? "bg-yellow-500" : "bg-green-500"
+                                : "bg-white/5"
+                            )}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <p className={cn("text-[10px] flex items-center gap-1", password.length >= 8 ? "text-green-400" : "text-gray-600")}>
+                        <span className="w-1 h-1 rounded-full bg-current" /> 8+ Characters
+                      </p>
+                      <p className={cn("text-[10px] flex items-center gap-1", /[A-Z]/.test(password) ? "text-green-400" : "text-gray-600")}>
+                        <span className="w-1 h-1 rounded-full bg-current" /> Uppercase
+                      </p>
+                      <p className={cn("text-[10px] flex items-center gap-1", /[0-9]/.test(password) ? "text-green-400" : "text-gray-600")}>
+                        <span className="w-1 h-1 rounded-full bg-current" /> Number
+                      </p>
+                      <p className={cn("text-[10px] flex items-center gap-1", /[!@#$%^&*(),.?":{}|<>]/.test(password) ? "text-green-400" : "text-gray-600")}>
+                        <span className="w-1 h-1 rounded-full bg-current" /> Special Char
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!isLogin && (
+                  <div className="mt-5">
+                    <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
+                        disabled={loading}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {success && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl mb-6"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center shrink-0">
+                    <Mail className="w-4 h-4 text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-green-400 text-xs font-bold uppercase tracking-wider mb-1">Check your email</p>
+                    <p className="text-gray-400 text-[11px] leading-relaxed">
+                      We've sent a professional reset link to <span className="text-white font-medium">{success.split('sent to ')[1]?.split('!')[0]}</span>. 
+                      It should arrive in 1-2 minutes.
                     </p>
-                    <p className={cn("text-[10px] flex items-center gap-1", /[A-Z]/.test(password) ? "text-green-400" : "text-gray-600")}>
-                      <span className="w-1 h-1 rounded-full bg-current" /> Uppercase
-                    </p>
-                    <p className={cn("text-[10px] flex items-center gap-1", /[0-9]/.test(password) ? "text-green-400" : "text-gray-600")}>
-                      <span className="w-1 h-1 rounded-full bg-current" /> Number
-                    </p>
-                    <p className={cn("text-[10px] flex items-center gap-1", /[!@#$%^&*(),.?":{}|<>]/.test(password) ? "text-green-400" : "text-gray-600")}>
-                      <span className="w-1 h-1 rounded-full bg-current" /> Special Char
-                    </p>
+                    <button 
+                      type="button"
+                      onClick={handleForgotPassword}
+                      className="text-purple-400 font-bold hover:underline text-[10px] mt-2 flex items-center gap-1"
+                    >
+                      Didn't get it? Resend link <ArrowRight className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
-              )}
+              </motion.div>
+            )}
 
-              {!isLogin && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
-                      disabled={loading}
-                    />
-                  </div>
+            {error && (
+              <div className="text-red-400 text-xs mt-3 ml-1 flex flex-col gap-2">
+                <div className="flex items-center gap-1">
+                  <span className="w-1 h-1 bg-red-400 rounded-full" />
+                  {error}
                 </div>
-              )}
-
-              {success && <p className="text-green-400 text-xs mt-3 ml-1 flex items-center gap-1">
-                <span className="w-1 h-1 bg-green-400 rounded-full" />
-                {success}
-              </p>}
-
-              {error && <p className="text-red-400 text-xs mt-3 ml-1 flex items-center gap-1">
-                <span className="w-1 h-1 bg-red-400 rounded-full" />
-                {error}
-              </p>}
-            </div>
+                {typeof error === 'string' && error.includes('already registered') && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsLogin(true);
+                      setError('');
+                      setPassword('');
+                      setConfirmPassword('');
+                      // If they were signing up, the email state is already set.
+                      // We set the username to the email so it shows up in the login box.
+                      if (email) setUsername(email);
+                    }}
+                    className="text-purple-400 font-bold hover:underline text-left ml-2"
+                  >
+                    Click here to switch to Login tab →
+                  </button>
+                )}
+              </div>
+            )}
 
             <button
               type="submit"
@@ -597,21 +701,44 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 loading && "animate-pulse"
               )}
             >
-              {loading ? (isLogin ? 'Logging in...' : 'Creating account...') : (isLogin ? 'Login' : 'Create Account')}
+              {loading 
+                ? (isFinishingProfile ? 'Saving profile...' : (isLogin ? 'Logging in...' : 'Creating account...')) 
+                : (isFinishingProfile ? 'Finish Setup' : (isLogin ? 'Login' : 'Create Account'))}
               {!loading && <ArrowRight className="w-4 h-4" />}
             </button>
 
-            <div className="text-center mt-6">
-              <p className="text-gray-500 text-xs">
-                {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
-                <Link 
-                  to={isLogin ? "/signup" : "/login"} 
-                  className="text-purple-400 font-bold hover:underline"
+            {!isFinishingProfile && (
+              <div className="text-center mt-6">
+                <p className="text-gray-500 text-xs">
+                  {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
+                  <Link 
+                    to={isLogin ? "/signup" : "/login"} 
+                    className="text-purple-400 font-bold hover:underline"
+                  >
+                    {isLogin ? 'Sign Up' : 'Login'}
+                  </Link>
+                </p>
+              </div>
+            )}
+
+            {isFinishingProfile && (
+              <div className="text-center mt-6 flex flex-col gap-3">
+                <button 
+                  type="button"
+                  onClick={() => signOut(auth)}
+                  className="text-gray-500 text-xs font-bold hover:text-gray-400"
                 >
-                  {isLogin ? 'Sign Up' : 'Login'}
-                </Link>
-              </p>
-            </div>
+                  Sign out and try again
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleResetApp}
+                  className="text-red-500/50 text-[10px] font-bold hover:text-red-400 uppercase tracking-widest"
+                >
+                  Trouble? Reset App
+                </button>
+              </div>
+            )}
           </form>
 
           <div className="mt-8 flex flex-col items-center justify-center gap-4">
@@ -632,8 +759,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           </div>
         </div>
 
-        <p className="mt-10 text-center text-gray-600 text-xs">
-          Sling uses end-to-end encryption for your privacy.
+        <p className="mt-10 text-center text-gray-600 text-xs flex flex-col gap-4 items-center">
+          <span>Sling uses end-to-end encryption for your privacy.</span>
+          <button 
+            onClick={handleResetApp}
+            className="text-gray-800 hover:text-gray-600 transition-colors text-[10px] uppercase tracking-widest font-medium"
+          >
+            Trouble logging in? Reset App
+          </button>
         </p>
       </motion.div>
     </div>

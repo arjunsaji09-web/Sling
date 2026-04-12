@@ -102,13 +102,34 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [username, setUsername] = useState<string | null>(localStorage.getItem('sling_username'));
-  const [photoURL, setPhotoURL] = useState<string | null>(localStorage.getItem('sling_photo'));
-  const [role, setRole] = useState<'user' | 'admin' | null>(localStorage.getItem('sling_role') as any);
+  const [username, setUsername] = useState<string | null>(null);
+  const [photoURL, setPhotoURL] = useState<string | null>(null);
+  const [role, setRole] = useState<'user' | 'admin' | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const loadingRef = React.useRef(true);
+
+  // Safe localStorage access
+  const safeGetItem = (key: string) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const safeSetItem = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {}
+  };
+
+  const safeRemoveItem = (key: string) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {}
+  };
 
   const fetchUserProfile = async (currentUser: User) => {
     try {
@@ -126,18 +147,18 @@ export default function App() {
         setPhotoURL(photo);
         setRole(userRole);
         
-        if (name) localStorage.setItem('sling_username', name);
-        localStorage.setItem('sling_role', userRole);
-        if (photo) localStorage.setItem('sling_photo', photo);
-        else localStorage.removeItem('sling_photo');
+        if (name) safeSetItem('sling_username', name);
+        safeSetItem('sling_role', userRole);
+        if (photo) safeSetItem('sling_photo', photo);
+        else safeRemoveItem('sling_photo');
       } else {
         console.log('No profile found in Firestore.');
         setUsername(null);
         setPhotoURL(null);
         setRole(null);
-        localStorage.removeItem('sling_username');
-        localStorage.removeItem('sling_photo');
-        localStorage.removeItem('sling_role');
+        safeRemoveItem('sling_username');
+        safeRemoveItem('sling_photo');
+        safeRemoveItem('sling_role');
       }
     } catch (err) {
       console.error('Error fetching user document:', err);
@@ -150,34 +171,42 @@ export default function App() {
     }
   };
 
+  function handleUnhandledRejection(event: PromiseRejectionEvent) {
+    console.error('Unhandled Rejection:', event.reason);
+  }
+
   useEffect(() => {
     // Try to get cached data
-    const cachedUsername = localStorage.getItem('sling_username');
-    const cachedPhoto = localStorage.getItem('sling_photo');
+    const cachedUsername = safeGetItem('sling_username');
+    const cachedPhoto = safeGetItem('sling_photo');
+    const cachedRole = safeGetItem('sling_role');
     if (cachedUsername) setUsername(cachedUsername);
     if (cachedPhoto) setPhotoURL(cachedPhoto);
+    if (cachedRole) setRole(cachedRole as any);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('Auth state changed:', user ? 'Logged In' : 'Logged Out');
       
-      if (user) {
-        // If we have a user, we MUST fetch the profile before stopping the loading state
-        // to avoid the "double redirect" jank (redirecting to login then back to dashboard)
-        setUser(user);
-        await fetchUserProfile(user);
-      } else {
-        setUser(null);
-        setUsername(null);
-        setPhotoURL(null);
-        setRole(null);
-        localStorage.removeItem('sling_username');
-        localStorage.removeItem('sling_photo');
-        localStorage.removeItem('sling_role');
-        localStorage.removeItem('sling_messages');
+      try {
+        if (user) {
+          setUser(user);
+          await fetchUserProfile(user);
+        } else {
+          setUser(null);
+          setUsername(null);
+          setPhotoURL(null);
+          setRole(null);
+          safeRemoveItem('sling_username');
+          safeRemoveItem('sling_photo');
+          safeRemoveItem('sling_role');
+          safeRemoveItem('sling_messages');
+        }
+      } catch (err) {
+        console.error('Error in onAuthStateChanged:', err);
+      } finally {
+        loadingRef.current = false;
+        setLoading(false);
       }
-      
-      loadingRef.current = false;
-      setLoading(false);
     }, (error) => {
       console.error('Auth Error:', error);
       setLoadError(`Firebase Auth Error: ${error.message}`);
@@ -220,10 +249,6 @@ export default function App() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
-
-  const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-    console.error('Unhandled Rejection:', event.reason);
-  };
 
   if (loading) {
     return (
@@ -269,44 +294,8 @@ export default function App() {
   }
 
   // Logged in but no profile (Half-logged-in state)
-  if (user && !username && !loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-6 text-center">
-        <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="w-full max-w-md glass p-8 rounded-[2rem]"
-        >
-          <div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
-            <RefreshCw className="w-10 h-10 text-purple-500 animate-spin" />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Completing Setup</h2>
-          <p className="text-gray-400 mb-8">
-            We're finishing setting up your profile. If this takes too long, please try signing out and back in.
-          </p>
-          
-          <div className="space-y-4">
-            <button 
-              onClick={() => refreshUser()}
-              className="w-full gradient-bg py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Retry Setup
-            </button>
-            
-            <button 
-              onClick={() => signOut(auth)}
-              className="w-full flex items-center justify-center gap-2 text-gray-600 text-sm hover:text-gray-400 transition-colors pt-4"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
+  // We let Login.tsx handle this state to allow users to finish their profile
+  
   // Email Verification Screen
   if (user && user.email && !user.emailVerified) {
     return (
@@ -338,9 +327,10 @@ export default function App() {
               onClick={async () => {
                 try {
                   await sendEmailVerification(user);
-                  alert('Verification email resent!');
+                  // Verification email resent
+                  console.log('Verification email resent!');
                 } catch (err: any) {
-                  alert(err.message);
+                  console.error('Resend error:', err.message);
                 }
               }}
               className="w-full bg-white/5 py-4 rounded-xl font-bold text-gray-400 hover:text-white transition-colors"
@@ -367,10 +357,21 @@ export default function App() {
         <Router>
           <React.Suspense fallback={
             <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-white font-sans">
-              <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.2)]">
-                <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-              </div>
-              <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex flex-col items-center"
+              >
+                <div className="w-20 h-20 gradient-bg rounded-[24px] flex items-center justify-center shadow-[0_20px_50px_rgba(168,85,247,0.2)] relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/10 animate-pulse" />
+                  <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin relative z-10" />
+                </div>
+                <h2 className="mt-6 text-3xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/50">Sling</h2>
+                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] uppercase tracking-[0.3em] font-bold">
+                  <div className="w-1 h-1 bg-purple-500 rounded-full animate-ping" />
+                  <span>Securing Session</span>
+                </div>
+              </motion.div>
             </div>
           }>
             <AnimatePresence mode="wait">
