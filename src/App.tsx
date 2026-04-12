@@ -225,7 +225,7 @@ export default function App() {
           <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
         <h2 className="mt-6 text-2xl font-bold tracking-tight">Sling</h2>
-        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.4)...</p>
+        <p className="mt-4 text-gray-500 text-sm animate-pulse">Initializing secure connection (v1.5)...</p>
         {debugInfo && <p className="mt-2 text-[10px] text-gray-700 font-mono">{debugInfo}</p>}
       </div>
     );
