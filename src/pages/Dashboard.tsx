@@ -454,7 +454,7 @@ export default function Dashboard() {
           <span className="font-bold text-xl tracking-tight">Sling</span>
         </div>
         <div className="flex items-center gap-2">
-          {role === 'admin' && (
+          {(role === 'admin' || user?.email?.toLowerCase() === 'arjunsaji09@gmail.com') && (
             <Link to="/admin-secure-panel" className="p-2 text-purple-400 hover:text-purple-300 transition-colors">
               <Shield className="w-5 h-5" />
             </Link>

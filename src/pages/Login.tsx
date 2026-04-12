@@ -81,12 +81,15 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
         console.log('Setting username to:', finalUsername);
         try {
+          // Check if this is the admin email
+          const userRole = user.email?.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
+
           await setDoc(doc(db, 'users', user.uid), {
             uid: user.uid,
             username: finalUsername,
             email: user.email || '',
             photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
-            role: 'user',
+            role: userRole,
             createdAt: serverTimestamp()
           }, { merge: true });
 
@@ -205,20 +208,23 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           loginEmail = username;
         } else {
           // Look up email by username
+          // NOTE: We only use the 'usernames' collection because it is publicly readable.
+          // The 'users' collection query requires authentication, so it won't work here.
           const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
           if (!usernameDoc.exists()) {
-            setError('Username not found');
+            setError('Username not found. If you have an old account, please try logging in with your email address.');
             setLoading(false);
             return;
           }
           
           const usernameData = usernameDoc.data();
-          if (usernameData.email) {
-            loginEmail = usernameData.email;
-          } else {
-            // Fallback to legacy sling email for old users
-            loginEmail = `${sanitizedUsername}@sling.app`;
-          }
+          loginEmail = usernameData.email;
+        }
+
+        if (!loginEmail) {
+          setError('Could not find an email associated with this username. Please try using your email address.');
+          setLoading(false);
+          return;
         }
 
         await signInWithEmailAndPassword(auth, loginEmail, password);
@@ -244,13 +250,16 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
         
+        // Check if this is the admin email
+        const userRole = email.toLowerCase() === 'arjunsaji09@gmail.com' ? 'admin' : 'user';
+        
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           username: sanitizedUsername,
           email: email,
           photoURL,
           avatarType: gender,
-          role: 'user',
+          role: userRole,
           createdAt: serverTimestamp()
         });
 
@@ -532,9 +541,21 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             </div>
           </form>
 
-          <div className="mt-8 flex items-center justify-center gap-2 text-gray-600 text-[10px] uppercase tracking-[0.2em] font-bold">
-            <ShieldCheck className="w-3 h-3" />
-            <span>Secure Authentication</span>
+          <div className="mt-8 flex flex-col items-center justify-center gap-4">
+            <div className="flex items-center justify-center gap-2 text-gray-600 text-[10px] uppercase tracking-[0.2em] font-bold">
+              <ShieldCheck className="w-3 h-3" />
+              <span>Secure Authentication</span>
+            </div>
+            
+            {isLogin && (
+              <div className="p-4 bg-purple-500/5 rounded-2xl border border-purple-500/10 text-center">
+                <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider mb-1">Admin Access</p>
+                <p className="text-[9px] text-gray-500 leading-relaxed">
+                  To access the Admin Panel, sign in with your registered admin email.<br/>
+                  Once logged in, the admin dashboard will appear in your profile menu.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
