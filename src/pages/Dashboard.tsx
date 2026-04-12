@@ -83,7 +83,7 @@ export default function Dashboard() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const profileUrl = `${window.location.origin}/${username}`;
+  const profileUrl = `${window.location.href.split('#')[0]}#/${username}`;
 
   const [showNotification, setShowNotification] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
