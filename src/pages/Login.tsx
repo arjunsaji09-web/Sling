@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
   sendEmailVerification,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
@@ -29,6 +30,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const [gender, setGender] = useState<'boy' | 'girl' | 'neutral'>('neutral');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [profilePic, setProfilePic] = useState<File | null>(null);
   const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null);
 
@@ -159,6 +161,25 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     return pass.length >= minLength && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar;
   };
 
+  const handleForgotPassword = async () => {
+    if (!email || !email.includes('@')) {
+      setError('Please enter your email address first to reset your password.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setSuccess('Password reset link sent to your email!');
+    } catch (err: any) {
+      console.error('Reset Error:', err);
+      setError(err.message || 'Failed to send reset email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     
@@ -276,7 +297,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError('Invalid username or password. Please check your credentials.');
       } else if (err.code === 'auth/email-already-in-use') {
-        setError('This email is already registered. Try logging in instead.');
+        setError('This email is already registered. Please go to the Login tab and sign in, or use "Forgot Password" if you lost your access.');
       } else if (err.code === 'auth/invalid-email') {
         setError('The email address is not valid.');
       } else if (err.code === 'auth/network-request-failed') {
@@ -371,7 +392,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (e.target.value.includes('@')) {
+                      setEmail(e.target.value);
+                    }
+                  }}
                   placeholder={isLogin ? "yourname or email@example.com" : "yourname"}
                   maxLength={isLogin ? 50 : 20}
                   className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-white placeholder:text-gray-700"
@@ -452,6 +478,17 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   disabled={loading}
                 />
               </div>
+              {isLogin && (
+                <div className="flex justify-end mt-2">
+                  <button 
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-[10px] text-purple-400 font-bold hover:underline"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              )}
               {!isLogin && password && (
                 <div className="mt-3 space-y-2">
                   <div className="flex gap-1 h-1">
@@ -509,6 +546,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   </div>
                 </div>
               )}
+
+              {success && <p className="text-green-400 text-xs mt-3 ml-1 flex items-center gap-1">
+                <span className="w-1 h-1 bg-green-400 rounded-full" />
+                {success}
+              </p>}
 
               {error && <p className="text-red-400 text-xs mt-3 ml-1 flex items-center gap-1">
                 <span className="w-1 h-1 bg-red-400 rounded-full" />
