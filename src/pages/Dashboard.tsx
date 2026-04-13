@@ -30,7 +30,12 @@ import {
   Shield,
   HelpCircle,
   Bell,
-  BellOff
+  BellOff,
+  Facebook,
+  Twitter,
+  Instagram,
+  Linkedin,
+  X
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -85,6 +90,7 @@ export default function Dashboard() {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [showShareMenu, setShowShareMenu] = useState(false);
 
   // Confirm Dialog state
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -331,12 +337,13 @@ export default function Dashboard() {
     const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
     const fullMessage = `${randomPrompt}\n\n👇 Send me anonymous messages here!\n${profileUrl}`;
     
-    // Try native share first
-    if (navigator.share) {
+    // Try native share first on mobile
+    if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       try {
         await navigator.share({
           title: 'Sling',
-          text: fullMessage
+          text: fullMessage,
+          url: profileUrl
         });
         return;
       } catch (err) {
@@ -348,7 +355,8 @@ export default function Dashboard() {
       }
     }
 
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(fullMessage)}`, '_blank');
+    // Show custom share menu for desktop or if native share fails/is cancelled
+    setShowShareMenu(true);
   };
 
   const deleteMessage = async (id: string) => {
@@ -1314,6 +1322,127 @@ export default function Dashboard() {
         {...confirmConfig}
         onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Custom Share Menu Modal */}
+      <AnimatePresence>
+        {showShareMenu && (
+          <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowShareMenu(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="relative w-full max-w-md bg-gray-900 border-t sm:border border-white/10 rounded-t-[2.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-2xl"
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-xl font-bold text-white">Share Profile</h3>
+                  <button 
+                    onClick={() => setShowShareMenu(false)}
+                    className="p-2 text-gray-500 hover:text-white transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-4 gap-6 mb-8">
+                  {[
+                    { 
+                      name: 'WhatsApp', 
+                      icon: <MessageCircle className="w-6 h-6" />, 
+                      color: 'bg-green-500',
+                      url: `https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_PROMPTS[0] + '\n' + profileUrl)}`
+                    },
+                    { 
+                      name: 'Facebook', 
+                      icon: <Facebook className="w-6 h-6" />, 
+                      color: 'bg-blue-600',
+                      url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(profileUrl)}`
+                    },
+                    { 
+                      name: 'X (Twitter)', 
+                      icon: <Twitter className="w-6 h-6" />, 
+                      color: 'bg-black',
+                      url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(SHARE_PROMPTS[0])}&url=${encodeURIComponent(profileUrl)}`
+                    },
+                    { 
+                      name: 'Telegram', 
+                      icon: <Send className="w-6 h-6" />, 
+                      color: 'bg-sky-500',
+                      url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(SHARE_PROMPTS[0])}`
+                    },
+                    { 
+                      name: 'LinkedIn', 
+                      icon: <Linkedin className="w-6 h-6" />, 
+                      color: 'bg-blue-700',
+                      url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(profileUrl)}`
+                    },
+                    { 
+                      name: 'Instagram', 
+                      icon: <Instagram className="w-6 h-6" />, 
+                      color: 'bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600',
+                      action: copyLink
+                    },
+                    { 
+                      name: 'Snapchat', 
+                      icon: <Zap className="w-6 h-6" />, 
+                      color: 'bg-yellow-400 text-black',
+                      action: copyLink
+                    },
+                    { 
+                      name: 'Copy', 
+                      icon: <Copy className="w-6 h-6" />, 
+                      color: 'bg-gray-700',
+                      action: copyLink
+                    }
+                  ].map((platform) => (
+                    <button
+                      key={platform.name}
+                      onClick={() => {
+                        if (platform.url) {
+                          window.open(platform.url, '_blank');
+                        } else if (platform.action) {
+                          platform.action();
+                        }
+                        setShowShareMenu(false);
+                      }}
+                      className="flex flex-col items-center gap-2 group"
+                    >
+                      <div className={cn(
+                        "w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg transition-all group-hover:scale-110 group-active:scale-95",
+                        platform.color
+                      )}>
+                        {platform.icon}
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{platform.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-4 flex items-center justify-between border border-white/5">
+                  <div className="truncate mr-4">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Your Profile Link</p>
+                    <p className="text-sm text-white truncate font-mono">{profileUrl}</p>
+                  </div>
+                  <button 
+                    onClick={copyLink}
+                    className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all"
+                  >
+                    <Copy className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
