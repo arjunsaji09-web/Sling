@@ -56,6 +56,7 @@ interface AuthContextType {
   setPhotoURL: (url: string | null) => void;
   setUsername: (name: string | null) => void;
   setCustomAppUrl: (url: string | null) => void;
+  setGlobalAppUrl: (url: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({ 
@@ -69,7 +70,8 @@ const AuthContext = createContext<AuthContextType>({
   refreshUser: async () => {},
   setPhotoURL: () => {},
   setUsername: () => {},
-  setCustomAppUrl: () => {}
+  setCustomAppUrl: () => {},
+  setGlobalAppUrl: () => {}
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -583,7 +585,8 @@ export default function App() {
           refreshUser,
           setPhotoURL,
           setUsername,
-          setCustomAppUrl
+          setCustomAppUrl,
+          setGlobalAppUrl
         }}>
           <ErrorBoundary>
             <Router>

@@ -64,7 +64,7 @@ interface Message {
 const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 
 export default function Dashboard() {
-  const { user, username, photoURL, role, refreshUser, setPhotoURL, customAppUrl, setCustomAppUrl, globalAppUrl } = useAuth();
+  const { user, username, photoURL, role, refreshUser, setPhotoURL, customAppUrl, setCustomAppUrl, globalAppUrl, setGlobalAppUrl } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
@@ -132,7 +132,13 @@ export default function Dashboard() {
   }, []);
 
   const getProfileUrl = () => {
-    const base = (customAppUrl || globalAppUrl || (process.env as any).APP_URL || window.location.origin).replace(/\/$/, '');
+    // Priority: 
+    // 1. Global URL set by Admin (Source of truth for everyone)
+    // 2. Custom URL set by user (if any)
+    // 3. Environment variable
+    // 4. Current origin
+    const base = (globalAppUrl || customAppUrl || (process.env as any).APP_URL || window.location.origin).replace(/\/$/, '');
+    
     // If the base already ends with the username, don't append it again
     if (base.toLowerCase().endsWith(`/${username?.toLowerCase()}`)) {
       return base;
@@ -433,6 +439,7 @@ export default function Dashboard() {
           updatedBy: user.uid,
           updatedAt: serverTimestamp()
         }, { merge: true });
+        setGlobalAppUrl(formattedUrl);
         showToast('Global link updated for all users! 🌍', 'success');
       } else {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -1019,7 +1026,8 @@ export default function Dashboard() {
                     </motion.div>
                   )}
 
-                  {isLocalhost && role !== 'admin' && (
+                  {/* Only Admin sees the Link Issue warning to fix it globally */}
+                  {isLocalhost && role === 'admin' && (
                     <motion.div 
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -1027,19 +1035,20 @@ export default function Dashboard() {
                     >
                       <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
                         <AlertTriangle className="w-3 h-3" />
-                        Link issue detected
+                        Global Link Required
                       </p>
                       <p className="text-[10px] text-gray-400 mb-3">
-                        Your link contains "localhost" and won't work for others.
+                        The current link contains "localhost". Set a global link for all users.
                       </p>
                       <button 
                         onClick={() => {
-                          setNewAppUrl(customAppUrl || '');
+                          setNewAppUrl(globalAppUrl || '');
+                          setSaveGlobally(true);
                           setShowUrlFixer(true);
                         }}
                         className="text-[10px] bg-amber-500 text-white px-4 py-2 rounded-lg font-bold uppercase tracking-widest hover:bg-amber-600 transition-colors"
                       >
-                        Fix Link Now
+                        Set Global Link
                       </button>
                     </motion.div>
                   )}
