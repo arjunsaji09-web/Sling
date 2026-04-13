@@ -131,7 +131,16 @@ export default function Dashboard() {
     }
   }, []);
 
-  const profileUrl = `${(customAppUrl || globalAppUrl || (process.env as any).APP_URL || window.location.origin).replace(/\/$/, '')}/${username}`;
+  const getProfileUrl = () => {
+    const base = (customAppUrl || globalAppUrl || (process.env as any).APP_URL || window.location.origin).replace(/\/$/, '');
+    // If the base already ends with the username, don't append it again
+    if (base.toLowerCase().endsWith(`/${username?.toLowerCase()}`)) {
+      return base;
+    }
+    return `${base}/${username}`;
+  };
+
+  const profileUrl = getProfileUrl();
   const isLocalhost = profileUrl.includes('localhost');
 
   const getShareMessage = (prompt: string) => {
@@ -1035,40 +1044,81 @@ export default function Dashboard() {
                     </motion.div>
                   )}
 
-                  <div className="w-full space-y-3">
-                    <div className="flex gap-2">
+                  <div className="w-full space-y-4">
+                    <div className="flex flex-col gap-3">
                       <button 
                         onClick={copyLink}
-                        className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
+                        className="w-full bg-white text-black py-5 rounded-[2rem] flex items-center justify-center gap-4 transition-all active:scale-[0.98] shadow-2xl shadow-white/10 group"
                       >
-                        {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-purple-400" />}
-                        <span className="font-medium text-theme">{copied ? t('copied') : t('copy_link')}</span>
+                        <div className="w-10 h-10 bg-black/5 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                          {copied ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5 text-black" />}
+                        </div>
+                        <span className="font-black text-lg uppercase tracking-tight">{copied ? t('copied') : 'Copy My Sling Link'}</span>
                       </button>
-                      
-                      <button 
-                        onClick={async () => {
-                          const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
-                          const text = `${randomPrompt}\n\n${profileUrl}`;
-                          await navigator.clipboard.writeText(text);
-                          showToast('Copied with catchy text! 🔥', 'success');
-                        }}
-                        className="bg-white/5 hover:bg-white/10 border border-white/10 px-4 rounded-2xl flex items-center justify-center transition-all active:scale-[0.98]"
-                        title="Copy with catchy text"
-                      >
-                        <Sparkles className="w-5 h-5 text-yellow-400" />
-                      </button>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <button 
+                          onClick={() => {
+                            const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
+                            const text = `${randomPrompt}\n\n${profileUrl}`;
+                            navigator.clipboard.writeText(text);
+                            showToast('Catchy link copied! 🔥', 'success');
+                          }}
+                          className="bg-white/5 hover:bg-white/10 border border-white/10 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                        >
+                          <Sparkles className="w-4 h-4 text-yellow-400" />
+                          <span className="text-xs font-bold uppercase tracking-widest">Catchy Link</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => showToast('Sling Polls coming soon! 🗳️', 'success')}
+                          className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                        >
+                          <Zap className="w-4 h-4 text-purple-400" />
+                          <span className="text-xs font-bold uppercase tracking-widest">Sling Polls</span>
+                        </button>
+                      </div>
                     </div>
                     
-                    <button 
-                      onClick={shareProfile}
-                      className="w-full gradient-bg py-4 rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                    >
-                      <Share2 className="w-5 h-5" />
-                      <span className="font-bold">{t('share_profile')}</span>
-                    </button>
+                    <div className="p-4 bg-theme rounded-2xl border border-white/5 text-center">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">Your Public Address</p>
+                      <p className="text-xs font-mono text-purple-400 break-all">{profileUrl}</p>
+                    </div>
                   </div>
                 </div>
               </motion.div>
+
+              {/* Catchy Feature: Sling Streaks */}
+              <div className="mb-8 overflow-hidden">
+                <div className="flex items-center justify-between mb-4 px-2">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-theme flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                    Sling Streaks
+                  </h3>
+                  <span className="text-[10px] font-bold text-purple-400 bg-purple-400/10 px-2 py-1 rounded-lg">LIVE</span>
+                </div>
+                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide px-2">
+                  {[
+                    { name: 'Your Streak', icon: '🔥', count: '0', color: 'bg-orange-500' },
+                    { name: 'Top Fan', icon: '👑', count: 'None', color: 'bg-yellow-500' },
+                    { name: 'Total Slings', icon: '🚀', count: messages.length, color: 'bg-purple-500' },
+                    { name: 'Global Rank', icon: '🌍', count: '#99+', color: 'bg-blue-500' }
+                  ].map((item, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.1 }}
+                      className="flex-shrink-0 w-32 glass p-4 rounded-3xl border border-white/5 relative overflow-hidden group"
+                    >
+                      <div className={`absolute -top-4 -right-4 w-12 h-12 ${item.color} opacity-10 blur-xl group-hover:opacity-20 transition-opacity`} />
+                      <div className="text-2xl mb-2">{item.icon}</div>
+                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter mb-1">{item.name}</div>
+                      <div className="text-lg font-black text-theme">{item.count}</div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
 
               {/* Messages Section */}
               <div className="flex items-center justify-between mb-6 px-2">
@@ -1424,11 +1474,11 @@ export default function Dashboard() {
       {/* Floating Action Button for Mobile */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 md:hidden">
         <button 
-          onClick={shareProfile}
-          className="gradient-bg px-8 py-4 rounded-full font-bold shadow-2xl shadow-purple-500/40 flex items-center gap-2 active:scale-95 transition-all"
+          onClick={copyLink}
+          className="bg-white text-black px-8 py-4 rounded-full font-black shadow-2xl shadow-white/20 flex items-center gap-3 active:scale-95 transition-all uppercase tracking-tight text-sm"
         >
-          <Share2 className="w-5 h-5" />
-          Share Profile
+          {copied ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
+          {copied ? t('copied') : 'Copy My Link'}
         </button>
       </div>
 
