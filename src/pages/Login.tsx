@@ -206,11 +206,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     }
   };
 
-  const handleBrowserLogin = () => {
-    const appUrl = 'https://ais-pre-jpjl6sl3ypg4jcpcon4egw-597038029842.asia-southeast1.run.app';
-    window.open(appUrl, '_blank');
-  };
-
   const formatEmail = (user: string) => `${user.toLowerCase()}@sling.app`;
 
   const isStrongPassword = (pass: string) => {
@@ -497,15 +492,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   </svg>
                   {t('continue_google')}
                 </button>
-                <div className="mt-2 text-center">
-                  <button
-                    type="button"
-                    onClick={handleBrowserLogin}
-                    className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-4"
-                  >
-                    Trouble logging in? Open in browser
-                  </button>
-                </div>
               </div>
             )}
 
