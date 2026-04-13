@@ -163,11 +163,11 @@ export default function HelpModal({ isOpen, onClose, onTestNotification }: HelpM
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-white uppercase tracking-wider">Follow us</p>
-                        <p className="text-xs text-gray-400">@_sling_ on Instagram</p>
+                        <p className="text-xs text-gray-400">@__sling_ on Instagram</p>
                       </div>
                     </div>
                     <a 
-                      href="https://instagram.com/_sling_" 
+                      href="https://instagram.com/__sling_" 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-bold text-white transition-all"
