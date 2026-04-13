@@ -49,10 +49,13 @@ interface AuthContextType {
   username: string | null;
   photoURL: string | null;
   role: 'user' | 'admin' | null;
+  customAppUrl: string | null;
+  globalAppUrl: string | null;
   loading: boolean;
   refreshUser: () => Promise<void>;
   setPhotoURL: (url: string | null) => void;
   setUsername: (name: string | null) => void;
+  setCustomAppUrl: (url: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({ 
@@ -60,10 +63,13 @@ const AuthContext = createContext<AuthContextType>({
   username: null, 
   photoURL: null, 
   role: null,
+  customAppUrl: null,
+  globalAppUrl: null,
   loading: true,
   refreshUser: async () => {},
   setPhotoURL: () => {},
-  setUsername: () => {}
+  setUsername: () => {},
+  setCustomAppUrl: () => {}
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -168,6 +174,8 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(null);
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [role, setRole] = useState<'user' | 'admin' | null>(null);
+  const [customAppUrl, setCustomAppUrl] = useState<string | null>(null);
+  const [globalAppUrl, setGlobalAppUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
@@ -222,15 +230,30 @@ export default function App() {
         const data = userDoc.data();
         const name = data.username || null;
         const photo = data.photoURL || null;
-        const userRole = data.role || (currentUser.email === 'admin@sling.app' ? 'admin' : 'user');
+        const userRole = data.role || (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(currentUser.email || '') ? 'admin' : 'user');
+        const appUrl = data.customAppUrl || null;
         
         setUsername(name);
         setPhotoURL(photo);
         setRole(userRole);
+        setCustomAppUrl(appUrl);
         
         if (name) safeSetItem('sling_username', name);
         safeSetItem('sling_role', userRole);
         if (photo) safeSetItem('sling_photo', photo);
+        if (appUrl) safeSetItem('sling_app_url', appUrl);
+
+        // Fetch global config
+        try {
+          const configDoc = await getDoc(doc(db, 'settings', 'config'));
+          if (configDoc.exists()) {
+            const globalUrl = configDoc.data().publicUrl;
+            setGlobalAppUrl(globalUrl);
+            if (globalUrl) safeSetItem('sling_global_url', globalUrl);
+          }
+        } catch (e) {
+          console.warn('Could not fetch global config:', e);
+        }
       }
     } catch (err) {
       console.error('Error fetching user document:', err);
@@ -252,9 +275,13 @@ export default function App() {
     const cachedUsername = safeGetItem('sling_username');
     const cachedPhoto = safeGetItem('sling_photo');
     const cachedRole = safeGetItem('sling_role');
+    const cachedAppUrl = safeGetItem('sling_app_url');
+    const cachedGlobalUrl = safeGetItem('sling_global_url');
     if (cachedUsername) setUsername(cachedUsername);
     if (cachedPhoto) setPhotoURL(cachedPhoto);
     if (cachedRole) setRole(cachedRole as any);
+    if (cachedAppUrl) setCustomAppUrl(cachedAppUrl);
+    if (cachedGlobalUrl) setGlobalAppUrl(cachedGlobalUrl);
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -280,9 +307,11 @@ export default function App() {
         setUsername(null);
         setPhotoURL(null);
         setRole(null);
+        setCustomAppUrl(null);
+        setGlobalAppUrl(null);
         setLoading(false);
         loadingRef.current = false;
-        ['sling_username', 'sling_photo', 'sling_role', 'sling_messages'].forEach(safeRemoveItem);
+        ['sling_username', 'sling_photo', 'sling_role', 'sling_messages', 'sling_app_url', 'sling_global_url'].forEach(safeRemoveItem);
       }
     }, (error) => {
       console.error('Auth Error:', error);
@@ -536,10 +565,13 @@ export default function App() {
           username, 
           photoURL, 
           role, 
+          customAppUrl,
+          globalAppUrl,
           loading, 
           refreshUser,
           setPhotoURL,
-          setUsername
+          setUsername,
+          setCustomAppUrl
         }}>
           <ErrorBoundary>
             <Router>

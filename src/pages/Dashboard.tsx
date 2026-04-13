@@ -36,7 +36,9 @@ import {
   Instagram,
   Linkedin,
   X,
-  Globe
+  Globe,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -61,7 +63,7 @@ interface Message {
 const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 
 export default function Dashboard() {
-  const { user, username, photoURL, role, refreshUser, setPhotoURL } = useAuth();
+  const { user, username, photoURL, role, refreshUser, setPhotoURL, customAppUrl, setCustomAppUrl, globalAppUrl } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
@@ -92,6 +94,10 @@ export default function Dashboard() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showUrlFixer, setShowUrlFixer] = useState(false);
+  const [newAppUrl, setNewAppUrl] = useState('');
+  const [savingUrl, setSavingUrl] = useState(false);
+  const [saveGlobally, setSaveGlobally] = useState(false);
 
   // Confirm Dialog state
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -122,7 +128,8 @@ export default function Dashboard() {
     }
   }, []);
 
-  const profileUrl = `${((process.env as any).APP_URL || window.location.origin).replace(/\/$/, '')}/${username}`;
+  const profileUrl = `${(customAppUrl || globalAppUrl || (process.env as any).APP_URL || window.location.origin).replace(/\/$/, '')}/${username}`;
+  const isLocalhost = profileUrl.includes('localhost');
 
   const getShareMessage = (prompt: string) => {
     // Putting the link on its own line at the end is best for most platforms
@@ -394,6 +401,40 @@ export default function Dashboard() {
     if (url) {
       window.open(url, '_blank');
       setShowShareMenu(false);
+    }
+  };
+
+  const saveCustomUrl = async () => {
+    if (!user || !newAppUrl.trim()) return;
+    setSavingUrl(true);
+    try {
+      let formattedUrl = newAppUrl.trim();
+      if (!formattedUrl.startsWith('http')) {
+        formattedUrl = `https://${formattedUrl}`;
+      }
+      // Remove trailing slash
+      formattedUrl = formattedUrl.replace(/\/$/, '');
+      
+      if (saveGlobally && role === 'admin') {
+        await setDoc(doc(db, 'settings', 'config'), {
+          publicUrl: formattedUrl,
+          updatedBy: user.uid,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        showToast('Global link updated for all users! 🌍', 'success');
+      } else {
+        await updateDoc(doc(db, 'users', user.uid), {
+          customAppUrl: formattedUrl
+        });
+        setCustomAppUrl(formattedUrl);
+        showToast('Public link updated! 🚀', 'success');
+      }
+      setShowUrlFixer(false);
+    } catch (err) {
+      console.error('Error saving URL:', err);
+      showToast('Failed to save link', 'error');
+    } finally {
+      setSavingUrl(false);
     }
   };
 
@@ -893,7 +934,32 @@ export default function Dashboard() {
                     </button>
                   </div>
                   <h2 className="text-2xl font-bold mb-1 text-theme">@{username}</h2>
-                  <p className="text-gray-500 dark:text-gray-400 mb-8">{t('share_to_start')}</p>
+                  <p className="text-gray-500 dark:text-gray-400 mb-4">{t('share_to_start')}</p>
+
+                  {isLocalhost && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="w-full mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-center"
+                    >
+                      <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
+                        <AlertTriangle className="w-3 h-3" />
+                        Link issue detected
+                      </p>
+                      <p className="text-[10px] text-gray-400 mb-3">
+                        Your link contains "localhost" and won't work for others.
+                      </p>
+                      <button 
+                        onClick={() => {
+                          setNewAppUrl(customAppUrl || '');
+                          setShowUrlFixer(true);
+                        }}
+                        className="text-[10px] bg-amber-500 text-white px-4 py-2 rounded-lg font-bold uppercase tracking-widest hover:bg-amber-600 transition-colors"
+                      >
+                        Fix Link Now
+                      </button>
+                    </motion.div>
+                  )}
 
                   <div className="w-full space-y-3">
                     <div className="flex gap-2">
@@ -1494,6 +1560,85 @@ export default function Dashboard() {
                     className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all"
                   >
                     <Copy className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* URL Fixer Modal */}
+      <AnimatePresence>
+        {showUrlFixer && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowUrlFixer(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="w-full max-w-md glass p-8 rounded-[2.5rem] relative z-10"
+            >
+              <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                <Globe className="w-8 h-8 text-amber-500" />
+              </div>
+              <h3 className="text-xl font-bold text-center text-theme mb-2">Set Public Link</h3>
+              <p className="text-sm text-gray-400 text-center mb-8">
+                Paste your app's public URL below so your share links work correctly.
+              </p>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                    Public App URL
+                  </label>
+                  <input 
+                    type="text"
+                    value={newAppUrl}
+                    onChange={(e) => setNewAppUrl(e.target.value)}
+                    placeholder="https://your-app.run.app"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-theme focus:outline-none focus:border-purple-500/50 transition-colors"
+                  />
+                  <p className="text-[9px] text-gray-600 italic px-1">
+                    Example: https://ais-dev-arj.run.app
+                  </p>
+                </div>
+
+                {role === 'admin' && (
+                  <div className="flex items-center gap-3 p-4 bg-purple-500/5 border border-purple-500/10 rounded-2xl">
+                    <input 
+                      type="checkbox"
+                      id="saveGlobally"
+                      checked={saveGlobally}
+                      onChange={(e) => setSaveGlobally(e.target.checked)}
+                      className="w-5 h-5 rounded border-white/10 bg-white/5 text-purple-500 focus:ring-purple-500"
+                    />
+                    <label htmlFor="saveGlobally" className="text-xs text-gray-400 cursor-pointer">
+                      Apply this link to <span className="text-purple-400 font-bold">ALL users</span> globally
+                    </label>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowUrlFixer(false)}
+                    className="flex-1 py-4 rounded-xl font-bold text-gray-500 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={saveCustomUrl}
+                    disabled={savingUrl || !newAppUrl.trim()}
+                    className="flex-2 gradient-bg py-4 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {savingUrl ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Save Link
                   </button>
                 </div>
               </div>

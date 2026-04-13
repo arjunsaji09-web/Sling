@@ -38,6 +38,10 @@
     "/usernames/{username}": {
       "schema": { "type": "object", "properties": { "uid": { "type": "string" } } },
       "description": "Mapping of usernames to UIDs to ensure uniqueness."
+    },
+    "/settings/{settingId}": {
+      "schema": { "type": "object", "properties": { "publicUrl": { "type": "string" } } },
+      "description": "Global application settings."
     }
   }
 }
