@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, setPersistence, indexedDBLocalPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -7,8 +7,8 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Set persistence to local for better support in WebViews/APKs
-setPersistence(auth, browserLocalPersistence).catch(err => {
+// Set persistence to indexedDB (best for WebViews) with local fallback
+setPersistence(auth, [indexedDBLocalPersistence, browserLocalPersistence]).catch(err => {
   console.error('Error setting persistence:', err);
 });
 
