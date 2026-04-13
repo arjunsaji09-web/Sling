@@ -6,6 +6,8 @@ import {
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
@@ -103,6 +105,73 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     }
   };
 
+  useEffect(() => {
+    // Handle redirect result
+    const handleRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          await handleUserLogin(result.user);
+        }
+      } catch (err: any) {
+        console.error('Redirect login error:', err);
+        handleAuthError(err);
+      }
+    };
+    handleRedirect();
+  }, []);
+
+  const handleUserLogin = async (user: any) => {
+    // Check if user profile exists - use a fast getDoc
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+
+    if (!userDoc.exists() || !userDoc.data()?.username) {
+      // New user or incomplete profile - create profile
+      const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.uid.slice(0, 5)}`;
+      let finalUsername = baseUsername;
+      
+      // Quick check if taken (check lowercase)
+      const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername.toLowerCase()));
+      if (usernameDoc.exists() && usernameDoc.data()?.uid !== user.uid) {
+        finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
+      }
+
+      const userRole = (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(user.email || '')) ? 'admin' : 'user';
+
+      // Run both sets in parallel for speed
+      await Promise.all([
+        setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          username: finalUsername,
+          email: user.email || '',
+          photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
+          role: userRole,
+          createdAt: serverTimestamp()
+        }, { merge: true }),
+        setDoc(doc(db, 'usernames', finalUsername.toLowerCase()), {
+          uid: user.uid,
+          email: user.email || '',
+          photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`
+        })
+      ]);
+    }
+  };
+
+  const handleAuthError = (err: any) => {
+    console.error('Auth Error:', err);
+    if (err.code === 'auth/popup-closed-by-user') {
+      setError('Login cancelled. Please complete the sign-in in the popup.');
+    } else if (err.code === 'auth/unauthorized-domain') {
+      setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to "Authorized Domains" in the Firebase Console.`);
+    } else if (err.code === 'auth/popup-blocked') {
+      setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
+    } else if (err.code === 'auth/operation-not-allowed') {
+      setError('Google Sign-In is not enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.');
+    } else {
+      setError(err.message || 'Authentication failed');
+    }
+  };
+
   const handleGoogleLogin = async () => {
     if (loading) return;
     setLoading(true);
@@ -111,56 +180,19 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      // Check if we are in a WebView or mobile device
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isWebView = (window as any).Android || (window as any).webkit || navigator.userAgent.includes('wv');
 
-      // Check if user profile exists - use a fast getDoc
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-
-      if (!userDoc.exists() || !userDoc.data()?.username) {
-        // New user or incomplete profile - create profile
-        const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.uid.slice(0, 5)}`;
-        let finalUsername = baseUsername;
-        
-        // Quick check if taken (check lowercase)
-        const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername.toLowerCase()));
-        if (usernameDoc.exists() && usernameDoc.data()?.uid !== user.uid) {
-          finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
-        }
-
-        const userRole = (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(user.email || '')) ? 'admin' : 'user';
-
-        // Run both sets in parallel for speed
-        await Promise.all([
-          setDoc(doc(db, 'users', user.uid), {
-            uid: user.uid,
-            username: finalUsername,
-            email: user.email || '',
-            photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
-            role: userRole,
-            createdAt: serverTimestamp()
-          }, { merge: true }),
-          setDoc(doc(db, 'usernames', finalUsername.toLowerCase()), {
-            uid: user.uid,
-            email: user.email || '',
-            photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`
-          })
-        ]);
-      }
-      // No need to call refreshUser here as App.tsx's onAuthStateChanged will handle it
-    } catch (err: any) {
-      console.error('Google Login Error:', err);
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError('Login cancelled. Please complete the sign-in in the popup.');
-      } else if (err.code === 'auth/unauthorized-domain') {
-        setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to "Authorized Domains" in the Firebase Console.`);
-      } else if (err.code === 'auth/popup-blocked') {
-        setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
-      } else if (err.code === 'auth/operation-not-allowed') {
-        setError('Google Sign-In is not enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.');
+      if (isMobile || isWebView) {
+        await signInWithRedirect(auth, provider);
+        // Page will redirect, result handled in useEffect
       } else {
-        setError(err.message || 'Google Login failed');
+        const result = await signInWithPopup(auth, provider);
+        await handleUserLogin(result.user);
       }
+    } catch (err: any) {
+      handleAuthError(err);
     } finally {
       setLoading(false);
     }
