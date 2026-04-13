@@ -128,7 +128,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
         }
 
-        const userRole = 'user';
+        const userRole = (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(user.email || '')) ? 'admin' : 'user';
 
         // Run both sets in parallel for speed
         await Promise.all([
@@ -223,6 +223,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
     if (sanitizedUsername.length < 3 && !isEmailInput) {
       setError('Username must be at least 3 characters');
+      return;
+    }
+
+    if (!cleanPassword) {
+      setError('Please enter your password');
       return;
     }
     
@@ -354,7 +359,23 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           </div>
         );
       } else if (err.code === 'auth/email-already-in-use') {
-        setError('This email is already registered. Please login instead.');
+        setError(
+          <div className="flex flex-col gap-2">
+            <span>This email is already registered.</span>
+            <button 
+              onClick={() => {
+                setIsLogin(true);
+                setError('');
+                if (email) setUsername(email);
+              }}
+              className="text-purple-400 font-bold hover:underline text-left"
+            >
+              Already have an account? Click here to Login →
+            </button>
+          </div>
+        );
+      } else if (err.code === 'auth/missing-password') {
+        setError('Please enter your password to continue.');
       } else if (err.code === 'auth/too-many-requests') {
         setError('Too many failed attempts. Please wait a few minutes or reset your password.');
       } else {

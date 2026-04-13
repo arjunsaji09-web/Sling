@@ -38,7 +38,8 @@ import {
   X,
   Globe,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  UserX
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -98,6 +99,8 @@ export default function Dashboard() {
   const [newAppUrl, setNewAppUrl] = useState('');
   const [savingUrl, setSavingUrl] = useState(false);
   const [saveGlobally, setSaveGlobally] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // Confirm Dialog state
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -435,6 +438,35 @@ export default function Dashboard() {
       showToast('Failed to save link', 'error');
     } finally {
       setSavingUrl(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || !username) return;
+    setDeletingAccount(true);
+    try {
+      // 1. Delete all messages received by the user
+      const messagesRef = collection(db, 'messages');
+      const q = query(messagesRef, where('recipientUid', '==', user.uid));
+      const snapshot = await getDocs(q);
+      const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, 'messages', d.id)));
+      
+      // 2. Delete username mapping
+      const usernamePromise = deleteDoc(doc(db, 'usernames', username.toLowerCase()));
+      
+      // 3. Delete user profile
+      const userPromise = deleteDoc(doc(db, 'users', user.uid));
+      
+      await Promise.all([...deletePromises, usernamePromise, userPromise]);
+      
+      // 4. Sign out and clear local storage
+      await auth.signOut();
+      localStorage.clear();
+      window.location.href = '/login';
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      showToast('Failed to delete account. Please try again.', 'error');
+      setDeletingAccount(false);
     }
   };
 
@@ -838,8 +870,15 @@ export default function Dashboard() {
               <Shield className="w-5 h-5" />
             </Link>
           )}
-          <button onClick={logout} className="p-2 text-gray-400 hover:text-theme transition-colors">
+          <button onClick={logout} className="p-2 text-gray-400 hover:text-theme transition-colors" title="Logout">
             <LogOut className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setShowDeleteAccount(true)} 
+            className="p-2 text-gray-600 hover:text-red-400 transition-colors"
+            title="Delete Account"
+          >
+            <UserX className="w-5 h-5" />
           </button>
         </div>
       </header>
@@ -1644,6 +1683,49 @@ export default function Dashboard() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+      {/* Delete Account Modal */}
+      <AnimatePresence>
+        {showDeleteAccount && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-6 overlay"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="w-full max-w-md glass p-8 rounded-[2.5rem] relative z-10"
+            >
+              <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                <UserX className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold text-center text-theme mb-2">Delete Account?</h3>
+              <p className="text-sm text-gray-400 text-center mb-8">
+                This will permanently delete your profile, username, and all received messages. This action cannot be undone.
+              </p>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteAccount(false)}
+                  className="flex-1 py-4 rounded-xl font-bold text-gray-500 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                  className="flex-2 bg-red-500 py-4 rounded-xl font-bold text-white shadow-xl shadow-red-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deletingAccount ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Delete Everything
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
