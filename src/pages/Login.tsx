@@ -167,6 +167,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
     } else if (err.code === 'auth/operation-not-allowed') {
       setError('Google Sign-In is not enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.');
+    } else if (err.code === 'auth/web-storage-unsupported') {
+      setError('Your browser or APK does not support the required storage for login. Please try opening in a standard browser.');
     } else {
       setError(err.message || 'Authentication failed');
     }
@@ -180,16 +182,20 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      // Check if we are in a WebView or mobile device
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isWebView = (window as any).Android || (window as any).webkit || navigator.userAgent.includes('wv');
-
-      if (isMobile || isWebView) {
-        await signInWithRedirect(auth, provider);
-        // Page will redirect, result handled in useEffect
-      } else {
+      // Try popup first as it's more reliable if supported
+      try {
         const result = await signInWithPopup(auth, provider);
         await handleUserLogin(result.user);
+        setLoading(false);
+        return;
+      } catch (popupErr: any) {
+        console.log('Popup failed, trying redirect...', popupErr.code);
+        // If popup is blocked or fails, fall back to redirect
+        if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/popup-closed-by-user' || popupErr.code === 'auth/cancelled-popup-request') {
+          await signInWithRedirect(auth, provider);
+        } else {
+          throw popupErr;
+        }
       }
     } catch (err: any) {
       handleAuthError(err);
