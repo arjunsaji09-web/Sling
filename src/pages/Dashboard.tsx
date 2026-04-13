@@ -35,7 +35,8 @@ import {
   Twitter,
   Instagram,
   Linkedin,
-  X
+  X,
+  Globe
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -121,7 +122,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  const profileUrl = `${window.location.origin}/${username}`;
+  const profileUrl = `${((process.env as any).APP_URL || window.location.origin).replace(/\/$/, '')}/${username}`;
 
   const getShareMessage = (prompt: string) => {
     // Putting the link on its own line at the end is best for most platforms
@@ -383,8 +384,9 @@ export default function Dashboard() {
           // Fallback to copy
         }
       }
-      copyLink();
-      showToast(`Link copied! Open ${platform} to paste.`, 'success');
+      const fullMsg = getShareMessage(randomPrompt);
+      await navigator.clipboard.writeText(fullMsg);
+      showToast(`Message copied! Open ${platform} to paste.`, 'success');
       setShowShareMenu(false);
       return;
     }
@@ -719,37 +721,55 @@ export default function Dashboard() {
           <div className="relative">
             <button 
               onClick={() => setShowLangMenu(!showLangMenu)}
-              className="p-2 text-gray-400 bg-white/5 hover:bg-white/10 rounded-xl transition-all flex items-center gap-1"
+              className="p-2.5 text-gray-400 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl transition-all flex items-center gap-2 group"
               title={t('language')}
             >
-              <span className="text-sm">{languages.find(l => l.code === language)?.flag}</span>
+              <Globe className="w-4 h-4 group-hover:text-purple-400 transition-colors" />
+              <span className="text-sm font-medium">{languages.find(l => l.code === language)?.flag}</span>
             </button>
             
             <AnimatePresence>
               {showLangMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-40 glass rounded-2xl p-2 z-[100] shadow-2xl border border-white/10"
-                >
-                  {languages.map((lang) => (
-                    <button
-                      key={lang.code}
-                      onClick={() => {
-                        setLanguage(lang.code as any);
-                        setShowLangMenu(false);
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all",
-                        language === lang.code ? "bg-purple-500/20 text-purple-400 font-bold" : "text-gray-400 hover:bg-white/5"
-                      )}
-                    >
-                      <span>{lang.flag}</span>
-                      <span>{lang.name}</span>
-                    </button>
-                  ))}
-                </motion.div>
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setShowLangMenu(false)}
+                    className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm md:hidden"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-2 w-56 bg-[#121212] border border-white/10 rounded-2xl p-2 z-[100] shadow-2xl backdrop-blur-2xl max-h-[70vh] overflow-y-auto no-scrollbar"
+                  >
+                    <div className="px-3 py-2 mb-1 border-b border-white/5">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('language')}</p>
+                    </div>
+                    {languages.map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => {
+                          setLanguage(lang.code as any);
+                          setShowLangMenu(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-all group",
+                          language === lang.code 
+                            ? "bg-purple-600 text-white font-bold shadow-lg shadow-purple-600/20" 
+                            : "text-gray-300 hover:bg-white/5"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg">{lang.flag}</span>
+                          <span>{lang.name}</span>
+                        </div>
+                        {language === lang.code && <Check className="w-4 h-4" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
               )}
             </AnimatePresence>
           </div>

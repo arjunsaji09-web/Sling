@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, HelpCircle, Sparkles, Shield, Zap, MessageCircle, Database, CheckCircle, Bell } from 'lucide-react';
+import { X, HelpCircle, Sparkles, Shield, Zap, MessageCircle, Database, CheckCircle, Bell, Info, Instagram } from 'lucide-react';
 import { useLanguage } from '../App';
 
 interface HelpModalProps {
@@ -155,6 +155,26 @@ export default function HelpModal({ isOpen, onClose, onTestNotification }: HelpM
                   <p className="mt-3 text-[9px] text-gray-600 text-center italic">
                     By using Sling, you agree to our use of local storage for session management.
                   </p>
+                  
+                  <div className="mt-4 p-4 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-white/5 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-lg">
+                        <Instagram className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-white uppercase tracking-wider">Follow us</p>
+                        <p className="text-xs text-gray-400">@_sling_ on Instagram</p>
+                      </div>
+                    </div>
+                    <a 
+                      href="https://instagram.com/_sling_" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-bold text-white transition-all"
+                    >
+                      Follow
+                    </a>
+                  </div>
                 </section>
               </div>
             </div>

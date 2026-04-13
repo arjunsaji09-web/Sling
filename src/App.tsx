@@ -258,15 +258,19 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUser(user);
+        // Only update if user changed or is new
+        setUser(prev => prev?.uid === user.uid ? prev : user);
+        
         // Prefetch dashboard as soon as we see a user
         prefetchDashboard();
         
         // Optimistically set loading false if we have cached data
-        if (safeGetItem('sling_username')) {
+        const cachedName = safeGetItem('sling_username');
+        if (cachedName) {
           setLoading(false);
           loadingRef.current = false;
         }
+        
         fetchUserProfile(user).finally(() => {
           setLoading(false);
           loadingRef.current = false;

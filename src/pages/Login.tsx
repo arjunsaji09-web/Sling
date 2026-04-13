@@ -8,7 +8,7 @@ import {
   signInWithPopup,
   signOut
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { useAuth, useLanguage } from '../App';
@@ -72,7 +72,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       }
     };
 
-    const timer = setTimeout(checkUsername, 300);
+    const timer = setTimeout(checkUsername, 150);
     return () => clearTimeout(timer);
   }, [username, isLogin, isFinishingProfile]);
 
@@ -105,18 +105,16 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
   const handleGoogleLogin = async () => {
     if (loading) return;
-    console.log('Starting Google Login...');
     setLoading(true);
     setError('');
     try {
       const provider = new GoogleAuthProvider();
-      // Force account selection to avoid "automatic" login issues
       provider.setCustomParameters({ prompt: 'select_account' });
       
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Check if user profile exists
+      // Check if user profile exists - use a fast getDoc
       const userDoc = await getDoc(doc(db, 'users', user.uid));
 
       if (!userDoc.exists() || !userDoc.data()?.username) {
@@ -243,7 +241,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
     try {
       if (isFinishingProfile && currentUser) {
-        console.log('Finishing profile...');
         let avatarStyle = 'avataaars';
         if (avatarType === 'boy') avatarStyle = 'micah';
         if (avatarType === 'girl') avatarStyle = 'lorelei';
@@ -263,7 +260,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           setDoc(doc(db, 'usernames', sanitizedUsername), {
             uid: currentUser.uid,
             email: currentUser.email || cleanEmail,
-            photoURL // Add photoURL for public profile view
+            photoURL
           })
         ]);
         return;
@@ -272,8 +269,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isLogin) {
         // Hardcoded admin access for 'arjun'
         if ((sanitizedUsername === 'arjun' || username.trim().toLowerCase() === 'arjun') && cleanPassword === 'Arjuner@123_&-') {
-          console.log('Admin bypass triggered for arjun');
-          // Use the admin email for Firebase session
           await signInWithEmailAndPassword(auth, 'admin@sling.app', 'Arjuner@123_&-');
           return;
         }
@@ -282,20 +277,15 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         if (isEmailInput) {
           loginEmail = username.trim().toLowerCase();
         } else {
-          console.log('Attempting username lookup for:', sanitizedUsername);
           const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
           if (!usernameDoc.exists()) {
-            // Check if they are trying to login with email but didn't include @
-            // Or if the username doc is missing but user doc exists
-            console.log('Username doc not found, checking users collection...');
             const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('username', '==', sanitizedUsername));
+            const q = query(usersRef, where('username', '==', sanitizedUsername), limit(1));
             const querySnapshot = await getDocs(q);
             
             if (!querySnapshot.empty) {
               loginEmail = querySnapshot.docs[0].data().email;
             } else {
-              // Last resort fallback
               loginEmail = `${sanitizedUsername}@sling.app`;
             }
           } else {
@@ -303,7 +293,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           }
         }
 
-        console.log('Final login email:', loginEmail);
         await signInWithEmailAndPassword(auth, loginEmail, cleanPassword);
       } else {
         // Sign Up
