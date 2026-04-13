@@ -230,7 +230,13 @@ export default function App() {
         const data = userDoc.data();
         const name = data.username || null;
         const photo = data.photoURL || null;
-        const userRole = data.role || (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(currentUser.email || '') ? 'admin' : 'user');
+        let userRole = data.role || 'user';
+        
+        // Force admin role for specific emails
+        if (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(currentUser.email || '')) {
+          userRole = 'admin';
+        }
+        
         const appUrl = data.customAppUrl || null;
         
         setUsername(name);
@@ -285,6 +291,12 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
+        // Force admin role immediately if email matches
+        if (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(user.email || '')) {
+          setRole('admin');
+          safeSetItem('sling_role', 'admin');
+        }
+        
         // Only update if user changed or is new
         setUser(prev => prev?.uid === user.uid ? prev : user);
         

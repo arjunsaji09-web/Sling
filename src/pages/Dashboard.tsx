@@ -975,7 +975,42 @@ export default function Dashboard() {
                   <h2 className="text-2xl font-bold mb-1 text-theme">@{username}</h2>
                   <p className="text-gray-500 dark:text-gray-400 mb-4">{t('share_to_start')}</p>
 
-                  {isLocalhost && (
+                  {role === 'admin' && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="w-full mb-6 p-6 bg-purple-500/10 border border-purple-500/20 rounded-[2rem] text-center shadow-xl shadow-purple-500/5"
+                    >
+                      <div className="flex items-center justify-center gap-3 mb-3">
+                        <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                          <Shield className="w-5 h-5 text-purple-400" />
+                        </div>
+                        <h3 className="text-sm font-bold text-theme uppercase tracking-widest">Admin Dashboard</h3>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mb-4 leading-relaxed">
+                        You have full control. Manage users, messages, or set the <span className="text-purple-400 font-bold">Global App Link</span> for everyone.
+                      </p>
+                      <div className="flex gap-2">
+                        <Link 
+                          to="/admin-secure-panel"
+                          className="flex-1 bg-purple-600 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-600/20"
+                        >
+                          Control Panel
+                        </Link>
+                        <button 
+                          onClick={() => {
+                            setNewAppUrl(globalAppUrl || customAppUrl || '');
+                            setShowUrlFixer(true);
+                          }}
+                          className="flex-1 bg-white/5 border border-white/10 text-theme py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+                        >
+                          Global Link
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {isLocalhost && role !== 'admin' && (
                     <motion.div 
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
