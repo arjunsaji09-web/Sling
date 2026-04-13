@@ -1,14 +1,15 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, HelpCircle, Sparkles, Shield, Zap, MessageCircle, Database, CheckCircle } from 'lucide-react';
+import { X, HelpCircle, Sparkles, Shield, Zap, MessageCircle, Database, CheckCircle, Bell } from 'lucide-react';
 import { useLanguage } from '../App';
 
 interface HelpModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onTestNotification?: () => void;
 }
 
-export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
+export default function HelpModal({ isOpen, onClose, onTestNotification }: HelpModalProps) {
   const { t } = useLanguage();
   return (
     <AnimatePresence>
@@ -137,7 +138,14 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       <span>100 message daily limit per user</span>
                     </li>
                   </ul>
-                  <div className="flex items-center justify-between p-3 bg-theme rounded-xl border border-white/5">
+                  <button 
+                    onClick={onTestNotification}
+                    className="w-full py-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                  >
+                    <Bell className="w-4 h-4" />
+                    Test SMS Notification
+                  </button>
+                  <div className="flex items-center justify-between p-3 bg-theme rounded-xl border border-white/5 mt-4">
                     <div className="flex items-center gap-2">
                       <Shield className="w-4 h-4 text-purple-400" />
                       <span className="text-[10px] font-bold text-theme uppercase tracking-wider">Storage Permission</span>

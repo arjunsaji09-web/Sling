@@ -11,23 +11,16 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         request.auth.token.email == "arjunsaji09@gmail.com");
-    }
-
-    function isRecent(timestamp) {
-      return timestamp > request.time - duration.value(5, 'm');
+      return isAuthenticated() && 
+        (request.auth.token.email == "arjunsaji09@gmail.com" || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     match /users/{userId} {
-      // ONLY the owner or admin can read the full profile (protects email)
       allow read: if isOwner(userId) || isAdmin();
-      // Public can only read non-sensitive fields if we had a public collection, 
-      // but for now, we'll keep it strict.
-      allow create: if isOwner(userId) && request.resource.data.role == 'user';
-      allow update: if isOwner(userId) && 
-                    (request.resource.data.role == resource.data.role || isAdmin());
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
     }
 
     match /usernames/{username} {
@@ -40,18 +33,18 @@ service cloud.firestore {
       allow read, delete: if isAuthenticated() && (resource.data.recipientUid == request.auth.uid || isAdmin());
       allow update: if isAuthenticated() && (resource.data.recipientUid == request.auth.uid || isAdmin());
       allow create: if request.resource.data.text is string 
-                    && request.resource.data.text.size() <= 500
-                    && request.resource.data.recipientUid != request.auth.uid;
+                    && request.resource.data.text.size() <= 500;
     }
 
     match /reports/{reportId} {
-      allow create: if isAuthenticated();
+      allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
     match /blocks/{blockId} {
-      allow create, read, delete: if isAuthenticated() && blockId.startsWith(request.auth.uid);
-      allow read, update, delete: if isAdmin();
+      allow read: if true;
+      allow create, delete: if isAuthenticated() && blockId.startsWith(request.auth.uid);
+      allow update: if isAdmin();
     }
   }
 }

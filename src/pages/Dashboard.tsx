@@ -36,6 +36,7 @@ import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface Message {
   id: string;
@@ -85,6 +86,24 @@ export default function Dashboard() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
+  // Confirm Dialog state
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    onConfirm: () => void;
+    type?: 'danger' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    cancelText: '',
+    onConfirm: () => {}
+  });
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
@@ -98,7 +117,7 @@ export default function Dashboard() {
 
   const profileUrl = `${window.location.origin}/${username}`;
 
-  const [showNotification, setShowNotification] = useState(false);
+  const [showNotification, setShowNotification] = useState<Message | null>(null);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -116,12 +135,22 @@ export default function Dashboard() {
     }
   };
 
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+      audio.volume = 0.5;
+      audio.play();
+    } catch (e) {
+      console.error('Audio play failed:', e);
+    }
+  };
+
   const showWebNotification = (title: string, body: string) => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification(title, {
         body,
-        icon: '/favicon.ico', // Fallback to favicon
-        badge: '/favicon.ico',
+        icon: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sling',
+        badge: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sling',
         tag: 'new-message'
       });
     }
@@ -140,15 +169,16 @@ export default function Dashboard() {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
       
       if (lastMessageCount !== null && msgs.length > lastMessageCount) {
-        setShowNotification(true);
         const latestMsg = msgs[0];
-        showWebNotification('New Message on Sling! ✨', latestMsg.text.substring(0, 50) + (latestMsg.text.length > 50 ? '...' : ''));
-        setTimeout(() => setShowNotification(false), 5000);
+        setShowNotification(latestMsg);
+        playNotificationSound();
+        showWebNotification('Sling: New Message! 🤫', latestMsg.text.substring(0, 50) + (latestMsg.text.length > 50 ? '...' : ''));
+        setTimeout(() => setShowNotification(null), 6000);
       }
       
       setMessages(msgs);
-      localStorage.setItem('sling_messages', JSON.stringify(msgs));
       setLastMessageCount(msgs.length);
+      localStorage.setItem('sling_messages', JSON.stringify(msgs));
       setLoading(false);
     }, (error) => {
       // Don't throw here to prevent app crash, just log and set loading false
@@ -160,7 +190,33 @@ export default function Dashboard() {
   }, [user]); // Removed lastMessageCount from dependencies
 
   useEffect(() => {
-        const searchUsers = async () => {
+    const searchUsers = async () => {
+      if (searchQuery.length === 0) {
+        // Fetch 5 recent users as suggestions
+        setSearching(true);
+        try {
+          const q = query(
+            collection(db, 'usernames'),
+            limit(10)
+          );
+          const snapshot = await getDocs(q);
+          const results = await Promise.all(snapshot.docs.map(async (d) => {
+            const uid = d.data().uid;
+            const userDoc = await getDoc(doc(db, 'users', uid));
+            return { 
+              username: d.id,
+              photoURL: userDoc.exists() ? userDoc.data().photoURL : null
+            };
+          }));
+          setSearchResults(results.filter(r => r.username.toLowerCase() !== username?.toLowerCase()));
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setSearching(false);
+        }
+        return;
+      }
+
       if (searchQuery.length < 2) {
         setSearchResults([]);
         return;
@@ -187,7 +243,7 @@ export default function Dashboard() {
           };
         }));
         
-        setSearchResults(results.filter(r => r.username !== username));
+        setSearchResults(results.filter(r => r.username.toLowerCase() !== username?.toLowerCase()));
       } catch (err) {
         console.error(err);
       } finally {
@@ -376,23 +432,33 @@ export default function Dashboard() {
 
   const reportMessage = async (msg: Message) => {
     if (!user) return;
-    if (!window.confirm(t('report_confirm'))) return;
-
-    try {
-      await addDoc(collection(db, 'reports'), {
-        messageId: msg.id,
-        messageText: msg.text,
-        reportedBy: user.uid,
-        recipientUid: msg.recipientUid,
-        senderUid: msg.senderUid || 'anonymous',
-        createdAt: serverTimestamp(),
-        status: 'pending'
-      });
-      showToast(t('report_success'), 'success');
-    } catch (err) {
-      console.error('Report Error:', err);
-      showToast('Failed to report message', 'error');
-    }
+    
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Report Message',
+      message: t('report_confirm'),
+      confirmText: 'Report',
+      cancelText: 'Cancel',
+      type: 'danger',
+      onConfirm: async () => {
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await addDoc(collection(db, 'reports'), {
+            messageId: msg.id,
+            messageText: msg.text,
+            reportedBy: user.uid,
+            recipientUid: msg.recipientUid,
+            senderUid: msg.senderUid || 'anonymous',
+            createdAt: serverTimestamp(),
+            status: 'pending'
+          });
+          showToast(t('report_success'), 'success');
+        } catch (err) {
+          console.error('Report Error:', err);
+          showToast('Failed to report message', 'error');
+        }
+      }
+    });
   };
 
   const blockUser = async (msg: Message) => {
@@ -400,20 +466,30 @@ export default function Dashboard() {
       showToast('Cannot block anonymous users without a UID', 'error');
       return;
     }
-    if (!window.confirm(t('block_confirm'))) return;
 
-    try {
-      const blockId = `${user.uid}_${msg.senderUid}`;
-      await setDoc(doc(db, 'blocks', blockId), {
-        blockerUid: user.uid,
-        blockedUid: msg.senderUid,
-        createdAt: serverTimestamp()
-      });
-      showToast(t('block_success'), 'success');
-    } catch (err) {
-      console.error('Block Error:', err);
-      showToast('Failed to block user', 'error');
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Block User',
+      message: t('block_confirm'),
+      confirmText: 'Block',
+      cancelText: 'Cancel',
+      type: 'danger',
+      onConfirm: async () => {
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          const blockId = `${user.uid}_${msg.senderUid}`;
+          await setDoc(doc(db, 'blocks', blockId), {
+            blockerUid: user.uid,
+            blockedUid: msg.senderUid,
+            createdAt: serverTimestamp()
+          });
+          showToast(t('block_success'), 'success');
+        } catch (err) {
+          console.error('Block Error:', err);
+          showToast('Failed to block user', 'error');
+        }
+      }
+    });
   };
 
   const updateAvatarStyle = async (style: 'boy' | 'girl' | 'neutral') => {
@@ -531,26 +607,38 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-theme pb-20">
-      {/* Notification */}
+      {/* SMS-style Notification Banner */}
       <AnimatePresence>
         {showNotification && (
           <motion.div 
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-sm"
+            initial={{ opacity: 0, y: -100, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -100, scale: 0.95 }}
+            onClick={() => {
+              setActiveTab('inbox');
+              setShowNotification(null);
+            }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] w-[92%] max-w-md cursor-pointer"
           >
-            <div className="gradient-bg p-4 rounded-2xl shadow-2xl flex items-center gap-4">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-white" />
+            <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-white/10 p-4 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center gap-4">
+              <div className="relative">
+                <div className="w-12 h-12 gradient-bg rounded-2xl flex items-center justify-center shadow-lg">
+                  <MessageCircle className="w-6 h-6 text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-2 border-white dark:border-gray-900 rounded-full" />
               </div>
-              <div className="flex-1">
-                <h4 className="font-bold text-sm">New Message! 👻</h4>
-                <p className="text-xs text-white/80">Someone just sent you a message.</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <h4 className="font-black text-sm tracking-tight text-gray-900 dark:text-white uppercase">Sling Message</h4>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Now</span>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-1 font-medium">
+                  {showNotification.text}
+                </p>
               </div>
-              <button onClick={() => setShowNotification(false)} className="p-1">
-                <Check className="w-4 h-4" />
-              </button>
+              <div className="w-8 h-8 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center">
+                <ArrowRight className="w-4 h-4 text-gray-400" />
+              </div>
             </div>
           </motion.div>
         )}
@@ -657,7 +745,7 @@ export default function Dashboard() {
           <button 
             onClick={() => {
               setActiveTab('inbox');
-              setShowNotification(false);
+              setShowNotification(null);
             }}
             className={cn(
               "flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all relative",
@@ -1057,7 +1145,7 @@ export default function Dashboard() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Enter username..."
+                    placeholder={t('search_users')}
                     maxLength={20}
                     className="w-full input-theme rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-400"                  />
                 </div>
@@ -1067,9 +1155,9 @@ export default function Dashboard() {
                     <div className="flex items-center justify-center py-8">
                       <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-purple-500"></div>
                     </div>
-                  ) : searchQuery.length >= 2 && searchResults.length === 0 ? (
+                  ) : searchQuery.length > 0 && searchResults.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
-                      No users found matching "{searchQuery}"
+                      {t('no_results')} "{searchQuery}"
                     </div>
                   ) : (
                     searchResults.map((res) => (
@@ -1090,20 +1178,21 @@ export default function Dashboard() {
                           <span className="font-bold">@{res.username}</span>
                         </div>
                         <Link 
-                          to={`/${res.username}`}
+                          to={`/${res.username.toLowerCase()}`}
                           className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all"
                         >
-                          Send Message
+                          {t('send')}
                           <ArrowRight className="w-3 h-3" />
                         </Link>
                       </motion.div>
                     ))
                   )}
                   
-                  {searchQuery.length < 2 && (
+                  {searchQuery.length === 0 && searchResults.length === 0 && (
                     <div className="text-center py-12 flex flex-col items-center">
-                      <Users className="w-12 h-12 text-gray-500 mb-4" />                      <p className="text-gray-500 text-sm max-w-[200px]">
-                        Type at least 2 characters to search for your friends!
+                      <Users className="w-12 h-12 text-gray-500 mb-4" />
+                      <p className="text-gray-500 text-sm max-w-[200px]">
+                        {t('share_to_start')}
                       </p>
                     </div>
                   )}
@@ -1174,7 +1263,7 @@ export default function Dashboard() {
                   <div className="pt-6 border-t border-white/10">
                     <p className="text-sm font-bold text-white/60">Send me anonymous messages!</p>
                     <p className="text-lg font-black text-white mt-1 uppercase tracking-tighter">
-                      {window.location.host}/{username}
+                      {window.location.origin.replace(/^https?:\/\//, '')}/{username}
                     </p>
                   </div>
                 </div>
@@ -1203,7 +1292,28 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      <HelpModal 
+        isOpen={showHelp} 
+        onClose={() => setShowHelp(false)} 
+        onTestNotification={() => {
+          const testMsg: Message = {
+            id: 'test',
+            text: 'This is a test Sling message! It looks just like an SMS. 🤫',
+            createdAt: new Date(),
+            recipientUid: user?.uid || '',
+            senderName: 'Sling Bot'
+          };
+          setShowNotification(testMsg);
+          playNotificationSound();
+          showWebNotification('Sling: Test Message! 🤫', testMsg.text);
+          setShowHelp(false);
+        }}
+      />
+
+      <ConfirmDialog
+        {...confirmConfig}
+        onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

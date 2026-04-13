@@ -78,7 +78,12 @@ export default function Profile() {
         // Use getDoc directly on the document ID for better performance and reliability
         // Remove trailing slashes and normalize to lowercase
         const sanitizedUsername = username.replace(/\/$/, '').toLowerCase();
-        const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
+        let usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
+        
+        // Fallback for older users with mixed-case keys
+        if (!usernameDoc.exists() && username !== sanitizedUsername) {
+          usernameDoc = await getDoc(doc(db, 'usernames', username));
+        }
         
         if (usernameDoc.exists()) {
           const userData = usernameDoc.data();

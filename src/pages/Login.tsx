@@ -124,8 +124,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.uid.slice(0, 5)}`;
         let finalUsername = baseUsername;
         
-        // Quick check if taken
-        const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername));
+        // Quick check if taken (check lowercase)
+        const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername.toLowerCase()));
         if (usernameDoc.exists() && usernameDoc.data()?.uid !== user.uid) {
           finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
         }
@@ -142,7 +142,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             role: userRole,
             createdAt: serverTimestamp()
           }, { merge: true }),
-          setDoc(doc(db, 'usernames', finalUsername), {
+          setDoc(doc(db, 'usernames', finalUsername.toLowerCase()), {
             uid: user.uid,
             email: user.email || '',
             photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`
