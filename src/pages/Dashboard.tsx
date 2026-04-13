@@ -1048,10 +1048,10 @@ export default function Dashboard() {
                     <div className="flex flex-col gap-3">
                       <button 
                         onClick={copyLink}
-                        className="w-full bg-white text-black py-5 rounded-[2rem] flex items-center justify-center gap-4 transition-all active:scale-[0.98] shadow-2xl shadow-white/10 group"
+                        className="w-full gradient-bg text-white py-5 rounded-[2rem] flex items-center justify-center gap-4 transition-all active:scale-[0.98] shadow-2xl shadow-purple-500/20 group"
                       >
-                        <div className="w-10 h-10 bg-black/5 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
-                          {copied ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5 text-black" />}
+                        <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                          {copied ? <Check className="w-5 h-5 text-white" /> : <Copy className="w-5 h-5 text-white" />}
                         </div>
                         <span className="font-black text-lg uppercase tracking-tight">{copied ? t('copied') : 'Copy My Sling Link'}</span>
                       </button>
@@ -1475,9 +1475,9 @@ export default function Dashboard() {
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 md:hidden">
         <button 
           onClick={copyLink}
-          className="bg-white text-black px-8 py-4 rounded-full font-black shadow-2xl shadow-white/20 flex items-center gap-3 active:scale-95 transition-all uppercase tracking-tight text-sm"
+          className="gradient-bg text-white px-8 py-4 rounded-full font-black shadow-2xl shadow-purple-500/40 flex items-center gap-3 active:scale-95 transition-all uppercase tracking-tight text-sm"
         >
-          {copied ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
+          {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
           {copied ? t('copied') : 'Copy My Link'}
         </button>
       </div>
