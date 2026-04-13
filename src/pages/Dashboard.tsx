@@ -123,6 +123,11 @@ export default function Dashboard() {
 
   const profileUrl = `${window.location.origin}/${username}`;
 
+  const getShareMessage = (prompt: string) => {
+    // Putting the link on its own line at the end is best for most platforms
+    return `${prompt}\n\n${profileUrl}`;
+  };
+
   const [showNotification, setShowNotification] = useState<Message | null>(null);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -335,14 +340,14 @@ export default function Dashboard() {
 
   const shareProfile = async () => {
     const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
-    const fullMessage = `${randomPrompt}\n\n👇 Send me anonymous messages here!\n${profileUrl}`;
+    const fullMessage = `${randomPrompt}\n\n${profileUrl}`;
     
-    // Try native share first on mobile
+    // Try native share first on mobile - this is the best way for Insta/Snap
     if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       try {
         await navigator.share({
           title: 'Sling',
-          text: fullMessage,
+          text: randomPrompt,
           url: profileUrl
         });
         return;
@@ -357,6 +362,37 @@ export default function Dashboard() {
 
     // Show custom share menu for desktop or if native share fails/is cancelled
     setShowShareMenu(true);
+  };
+
+  const handlePlatformShare = async (platform: string, url?: string) => {
+    const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
+    
+    if (platform === 'Instagram' || platform === 'Snapchat') {
+      // These apps don't have standard web share URLs
+      // Try native share specifically for these if possible
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'Sling',
+            text: randomPrompt,
+            url: profileUrl
+          });
+          setShowShareMenu(false);
+          return;
+        } catch (e) {
+          // Fallback to copy
+        }
+      }
+      copyLink();
+      showToast(`Link copied! Open ${platform} to paste.`, 'success');
+      setShowShareMenu(false);
+      return;
+    }
+
+    if (url) {
+      window.open(url, '_blank');
+      setShowShareMenu(false);
+    }
   };
 
   const deleteMessage = async (id: string) => {
@@ -1358,7 +1394,7 @@ export default function Dashboard() {
                       name: 'WhatsApp', 
                       icon: <MessageCircle className="w-6 h-6" />, 
                       color: 'bg-green-500',
-                      url: `https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_PROMPTS[0] + '\n' + profileUrl)}`
+                      url: `https://wa.me/?text=${encodeURIComponent(profileUrl + '\n\n' + SHARE_PROMPTS[0])}`
                     },
                     { 
                       name: 'Facebook', 
@@ -1388,13 +1424,13 @@ export default function Dashboard() {
                       name: 'Instagram', 
                       icon: <Instagram className="w-6 h-6" />, 
                       color: 'bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600',
-                      action: copyLink
+                      platform: 'Instagram'
                     },
                     { 
                       name: 'Snapchat', 
                       icon: <Zap className="w-6 h-6" />, 
                       color: 'bg-yellow-400 text-black',
-                      action: copyLink
+                      platform: 'Snapchat'
                     },
                     { 
                       name: 'Copy', 
@@ -1406,12 +1442,14 @@ export default function Dashboard() {
                     <button
                       key={platform.name}
                       onClick={() => {
-                        if (platform.url) {
-                          window.open(platform.url, '_blank');
+                        if (platform.platform) {
+                          handlePlatformShare(platform.platform);
+                        } else if (platform.url) {
+                          handlePlatformShare(platform.name, platform.url);
                         } else if (platform.action) {
                           platform.action();
+                          setShowShareMenu(false);
                         }
-                        setShowShareMenu(false);
                       }}
                       className="flex flex-col items-center gap-2 group"
                     >
