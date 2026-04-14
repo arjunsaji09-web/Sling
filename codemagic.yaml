@@ -23,7 +23,13 @@ workflows:
           cd android
           # Explicitly set the SDK path for the build machine
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          # Clean and Build
-          ./gradlew clean assembleRelease --no-daemon
+          
+          # Try using the wrapper first, fallback to system gradle if wrapper is broken
+          if [ -f "./gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew clean assembleRelease --no-daemon || gradle clean assembleRelease --no-daemon
+          else
+            gradle clean assembleRelease --no-daemon
+          fi
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
