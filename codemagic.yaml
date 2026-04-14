@@ -14,6 +14,8 @@ workflows:
         script: |
           npm run build
           npx cap sync android
-          cd android && ./gradlew assembleDebug
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
