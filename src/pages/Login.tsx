@@ -202,56 +202,41 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection to ensure a fresh state
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      const isCapacitor = (window as any).Capacitor !== undefined;
-      const isIframe = window.self !== window.top;
-
-      // For Native APK or Iframe, Popup is the only reliable way without losing app state
-      if (isCapacitor || isIframe) {
-        try {
-          const result = await signInWithPopup(auth, provider);
-          if (result.user) {
-            setStatus('Success! Loading Sling...');
-            await handleUserLogin(result.user);
-          }
-          setLoading(false);
-          return;
-        } catch (popupErr: any) {
-          console.error('Popup failed:', popupErr);
-          // If popup is blocked in APK, we have to show the fallback
-          if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/operation-not-supported-in-this-environment') {
-            setStatus('');
-            setLoading(true); // Keep loading true to show the fallback buttons
-            setError('Google Login was blocked by the app. Please use the Chrome button below to log in securely.');
-          } else {
-            handleAuthError(popupErr);
-            setLoading(false);
-          }
-          return;
+      // Use signInWithPopup as requested by the user for better APK compatibility
+      try {
+        const result = await signInWithPopup(auth, provider);
+        if (result.user) {
+          setStatus('Success! Loading Sling...');
+          await handleUserLogin(result.user);
         }
-      }
-
-      // Standard Web Flow
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      if (isMobile) {
-        setStatus('Redirecting...');
-        await signInWithRedirect(auth, provider);
-      } else {
-        try {
-          const result = await signInWithPopup(auth, provider);
-          if (result.user) {
-            setStatus('Success! Loading Sling...');
-            await handleUserLogin(result.user);
-          }
+        setLoading(false);
+      } catch (popupErr: any) {
+        console.error('Popup failed:', popupErr);
+        
+        // If popup is blocked or not supported, we show the fallback buttons
+        if (popupErr.code === 'auth/popup-blocked' || 
+            popupErr.code === 'auth/operation-not-supported-in-this-environment' ||
+            popupErr.code === 'auth/internal-error') {
+          
+          setStatus('');
+          setError(
+            <div className="flex flex-col gap-2">
+              <span>Google Login was blocked or is not supported in this view.</span>
+              <span className="text-[10px] opacity-70">Please use the "Open in Chrome" button below to log in securely.</span>
+            </div>
+          );
+          // Keep loading true so the fallback buttons remain visible
+          setLoading(true); 
+        } else if (popupErr.code === 'auth/popup-closed-by-user') {
           setLoading(false);
-        } catch (popupErr: any) {
-          if (popupErr.code === 'auth/popup-blocked') {
-            setStatus('Redirecting...');
-            await signInWithRedirect(auth, provider);
-          } else {
-            throw popupErr;
-          }
+          setStatus('');
+        } else {
+          handleAuthError(popupErr);
+          setLoading(false);
+          setStatus('');
         }
       }
     } catch (err: any) {
@@ -558,31 +543,17 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 </button>
                 {loading && (
                   <div className="mt-4 text-center animate-fade-in">
-                    <p className="text-[10px] text-gray-500 mb-2">
-                      {(window as any).Capacitor 
-                        ? 'Native APK: Use Chrome if login is blocked' 
-                        : 'Stuck? Try opening in browser'}
-                    </p>
-                    <div className="flex items-center justify-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => window.open('https://ais-pre-jpjl6sl3ypg4jcpcon4egw-597038029842.asia-southeast1.run.app', '_blank')}
-                        className="px-4 py-2 bg-purple-600 rounded-lg text-[10px] font-bold text-white hover:bg-purple-500 transition-all shadow-lg shadow-purple-500/20"
-                      >
-                        Open in Chrome
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLoading(false);
-                          setStatus('');
-                          setError('');
-                        }}
-                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400 hover:text-white transition-all"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoading(false);
+                        setStatus('');
+                        setError('');
+                      }}
+                      className="px-6 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400 hover:text-white transition-all"
+                    >
+                      Cancel Login
+                    </button>
                   </div>
                 )}
               </div>
