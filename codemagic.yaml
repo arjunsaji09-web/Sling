@@ -12,11 +12,14 @@ workflows:
       - name: Install dependencies
         script: |
           npm install
-      - name: Build Android APK
+      - name: Sync and Fix Permissions
         script: |
+          # This fixes the exact error in the screenshot
           npm run build
           npx cap sync android
-          # Use Capacitor's internal build command to bypass manual gradle paths
-          npx cap build android --androidreleasetype APK
+          cd android && chmod +x gradlew
+      - name: Build Android APK
+        script: |
+          cd android && ./gradlew assembleRelease
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
