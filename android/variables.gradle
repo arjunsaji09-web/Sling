@@ -1,4 +1,5 @@
 ext {
+    googlePlayServicesVersion = '18.0.0'
     minSdkVersion = 22
     compileSdkVersion = 34
     targetSdkVersion = 34

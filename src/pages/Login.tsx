@@ -232,18 +232,32 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           }
 
           // Show the error to the user
+          const errorMsg = nativeErr.message || JSON.stringify(nativeErr);
           setError(
             <div className="flex flex-col gap-2">
-              <span className="font-bold">Native Login Failed</span>
-              <span className="text-xs opacity-80">Error: {nativeErr.message || JSON.stringify(nativeErr)}</span>
-              <span className="text-[10px] opacity-70">Falling back to web login...</span>
+              <span className="font-bold text-red-400">Native Login Failed</span>
+              <span className="text-[10px] opacity-90 bg-black/20 p-2 rounded">
+                {errorMsg.includes('10') || errorMsg.includes('12500') 
+                  ? "Error 10/12500: This usually means your SHA-1 fingerprint is not registered in Firebase Console."
+                  : `Error: ${errorMsg}`}
+              </span>
+              <button 
+                onClick={() => {
+                  setError('');
+                  setLoading(false);
+                }}
+                className="text-[10px] text-purple-400 underline mt-1"
+              >
+                Try again
+              </button>
             </div>
           );
           
-          // Wait a bit so they can read the error before fallback
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          setError('');
-          // Continue to web fallback
+          setLoading(false);
+          setStatus('');
+          // STOP HERE - do not fall back to web login automatically on native
+          // as it will likely be blocked by Google anyway.
+          return;
         }
       }
 
