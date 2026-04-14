@@ -142,38 +142,19 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   }, []);
 
   const handleUserLogin = async (user: any) => {
-    // Check if user profile exists - use a fast getDoc
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-
-    if (!userDoc.exists() || !userDoc.data()?.username) {
-      // New user or incomplete profile - create profile
-      const baseUsername = user.email?.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') || `user_${user.uid.slice(0, 5)}`;
-      let finalUsername = baseUsername;
-      
-      // Quick check if taken (check lowercase)
-      const usernameDoc = await getDoc(doc(db, 'usernames', finalUsername.toLowerCase()));
-      if (usernameDoc.exists() && usernameDoc.data()?.uid !== user.uid) {
-        finalUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
+    // We no longer auto-create profiles here.
+    // Instead, we just let the useEffect trigger 'isFinishingProfile' mode
+    // if the user document doesn't exist or doesn't have a username.
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists() && userDoc.data()?.username) {
+        // Profile exists, App.tsx will redirect to dashboard
+      } else {
+        // Profile missing, isFinishingProfile will trigger
+        setIsFinishingProfile(true);
       }
-
-      const userRole = (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(user.email || '')) ? 'admin' : 'user';
-
-      // Run both sets in parallel for speed
-      await Promise.all([
-        setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          username: finalUsername,
-          email: user.email || '',
-          photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`,
-          role: userRole,
-          createdAt: serverTimestamp()
-        }, { merge: true }),
-        setDoc(doc(db, 'usernames', finalUsername.toLowerCase()), {
-          uid: user.uid,
-          email: user.email || '',
-          photoURL: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalUsername}`
-        })
-      ]);
+    } catch (err) {
+      console.error('Error checking user profile:', err);
     }
   };
 
@@ -325,11 +306,17 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
     try {
       if (isFinishingProfile && currentUser) {
+        if (!password) {
+          setError('Please set a password for your account');
+          setLoading(false);
+          return;
+        }
+
         let avatarStyle = 'avataaars';
         if (avatarType === 'boy') avatarStyle = 'micah';
         if (avatarType === 'girl') avatarStyle = 'lorelei';
         const photoURL = `https://api.dicebear.com/7.x/${avatarStyle}/svg?seed=${sanitizedUsername}`;
-        const userRole = 'user';
+        const userRole = (['admin@sling.app', 'arjunsaji09@gmail.com'].includes(currentUser.email || '')) ? 'admin' : 'user';
 
         await Promise.all([
           setDoc(doc(db, 'users', currentUser.uid), {
@@ -339,6 +326,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             photoURL,
             avatarType,
             role: userRole,
+            password: cleanPassword, // Store password as requested
             createdAt: serverTimestamp()
           }, { merge: true }),
           setDoc(doc(db, 'usernames', sanitizedUsername), {
@@ -347,6 +335,9 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             photoURL
           })
         ]);
+        
+        // Refresh profile in App.tsx
+        if (refreshUser) await refreshUser();
         return;
       }
 
@@ -568,7 +559,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 ml-1 uppercase tracking-wider">
-                {isLogin ? t('username') : t('username')}
+                {isFinishingProfile ? 'Choose Username' : (isLogin ? t('username') : t('username'))}
               </label>
               <div className="relative">
                 <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -581,7 +572,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   className="w-full input-theme rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
                   disabled={loading}
                 />
-                {!isLogin && !isFinishingProfile && username.length >= 3 && (
+                {username.length >= 3 && (
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     {isUsernameAvailable === true && <div className="text-green-500 text-[10px] font-bold">Available</div>}
                     {isUsernameAvailable === false && <div className="text-red-500 text-[10px] font-bold">Taken</div>}
@@ -646,10 +637,10 @@ export default function Login({ isLoginMode = true }: LoginProps) {
               </div>
             )}
 
-            {!isFinishingProfile && (
+            {(isLogin || !isFinishingProfile || isFinishingProfile) && (
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                  Password
+                  {isFinishingProfile ? 'Set Password' : 'Password'}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -688,7 +679,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     </button>
                   </div>
                 )}
-                {!isLogin && password && (
+                {(isFinishingProfile || !isLogin) && password && (
                   <div className="mt-3 space-y-2">
                     <div className="flex gap-1 h-1">
                       {[1, 2, 3, 4].map((i) => {

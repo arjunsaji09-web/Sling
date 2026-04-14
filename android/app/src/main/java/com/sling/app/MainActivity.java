@@ -36,6 +36,9 @@ public class MainActivity extends BridgeActivity {
                 newSettings.setJavaScriptEnabled(true);
                 newSettings.setJavaScriptCanOpenWindowsAutomatically(true);
                 newSettings.setSupportMultipleWindows(true);
+                newSettings.setDomStorageEnabled(true);
+                newSettings.setDatabaseEnabled(true);
+                newSettings.setAllowFileAccess(true);
                 
                 // Apply the same hardcoded User Agent to the popup window
                 newSettings.setUserAgentString(chromeUserAgent);
