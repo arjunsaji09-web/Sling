@@ -1,35 +1,19 @@
 workflows:
   android-workflow:
-    name: Sling Android Build
+    name: Android Build
+    max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      groups:
-        - android-sdk
-        - signing
-      vars:
-        FNC_KEYSTORE_REF: sling_release_key
+      node: 20
+      java: 17
     scripts:
       - name: Install dependencies
         script: |
           npm install
-      - name: Sync and Fix Permissions
-        script: |
-          # This fixes the exact error in the screenshot
-          npm run build
-          npx cap sync android
-          cd android && chmod +x gradlew
       - name: Build Android APK
         script: |
-          cd android
-          # Explicitly set the SDK path for the build machine
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          
-          # Try using the wrapper first, fallback to system gradle if wrapper is broken
-          if [ -f "./gradlew" ]; then
-            chmod +x gradlew
-            ./gradlew clean assembleRelease --no-daemon || gradle clean assembleRelease --no-daemon
-          else
-            gradle clean assembleRelease --no-daemon
-          fi
+          npm run build
+          npx cap sync android
+          cd android && ./gradlew assembleDebug
     artifacts:
-      - android/app/build/outputs/apk/release/*.apk
+      - android/app/build/outputs/apk/debug/app-debug.apk
