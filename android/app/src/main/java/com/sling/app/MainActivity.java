@@ -39,6 +39,12 @@ public class MainActivity extends BridgeActivity {
                 newSettings.setJavaScriptCanOpenWindowsAutomatically(true);
                 newSettings.setSupportMultipleWindows(true);
                 
+                // Apply User Agent spoofing to the popup window as well
+                String popupUserAgent = newSettings.getUserAgentString();
+                popupUserAgent = popupUserAgent.replaceAll("; wv\\)", ")")
+                                             .replaceAll("Version\\/\\d+\\.\\d+\\s+", "");
+                newSettings.setUserAgentString(popupUserAgent);
+                
                 newWebView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
