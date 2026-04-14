@@ -19,26 +19,14 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm install --legacy-peer-deps
-      - name: Build web project
+          npm install
+      - name: Generate Android Folder
         script: |
           npm run build
-      - name: Sync Capacitor
-        script: |
-          npx cap copy android
           npx cap sync android
       - name: Build and Sign Android APK
         script: |
-          cd android
-          # Fix line endings and permissions for the Gradle wrapper
-          tr -d '\r' < gradlew > gradlew.tmp && mv gradlew.tmp gradlew
-          chmod +x gradlew
-          # Set SDK path
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          
-          # Build the Release APK
-          # Codemagic will automatically inject signing properties if configured in the UI
-          ./gradlew assembleRelease --no-daemon
+          cd android && chmod +x gradlew && ./gradlew assembleRelease
     artifacts:
       - android/app/build/outputs/apk/release/app-release.apk
     publishing:
