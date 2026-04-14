@@ -8,7 +8,8 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  signOut
+  signOut,
+  signInWithCredential
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -20,6 +21,8 @@ import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
 // Prefetch dashboard
 const prefetchDashboard = () => import('./Dashboard');
@@ -80,6 +83,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   }, [username, isLogin, isFinishingProfile]);
 
   useEffect(() => {
+    // Initialize Google Auth for native
+    if (Capacitor.isNativePlatform()) {
+      GoogleAuth.initialize();
+    }
+    
     setIsLogin(isLoginMode);
     setError('');
   }, [isLoginMode]);
@@ -182,6 +190,37 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     setStatus('Connecting to Google...');
     
     try {
+      // Check if running on native platform
+      const isNative = Capacitor.isNativePlatform();
+      
+      if (isNative) {
+        setStatus('Opening native account picker...');
+        try {
+          const googleUser = await GoogleAuth.signIn();
+          if (googleUser && googleUser.authentication.idToken) {
+            setStatus('Authenticating with Sling...');
+            const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+            const result = await signInWithCredential(auth, credential);
+            if (result.user) {
+              setStatus('Success! Loading Sling...');
+              await handleUserLogin(result.user);
+            }
+          }
+          setLoading(false);
+          setStatus('');
+          return;
+        } catch (nativeErr: any) {
+          console.error('Native Google Auth failed:', nativeErr);
+          // If native fails, we can try to fall back to web, but usually it means config is wrong
+          if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.includes('cancel')) {
+            setLoading(false);
+            setStatus('');
+            return;
+          }
+          // Continue to web fallback if it's not a cancellation
+        }
+      }
+
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ 
         prompt: 'select_account',
