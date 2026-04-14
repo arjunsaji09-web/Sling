@@ -22,12 +22,10 @@ public class MainActivity extends BridgeActivity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(true);
         
-        // Spoof User Agent to bypass "disallowed_useragent" error
-        String userAgent = settings.getUserAgentString();
-        // Remove "Version/X.X" and "wv" which identify it as a WebView
-        userAgent = userAgent.replaceAll("; wv\\)", ")")
-                             .replaceAll("Version\\/\\d+\\.\\d+\\s+", "");
-        settings.setUserAgentString(userAgent);
+        // Hardcoded modern Chrome User Agent to bypass Google's WebView detection
+        // This tells Google we are a real Chrome browser on a Pixel 7
+        String chromeUserAgent = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36";
+        settings.setUserAgentString(chromeUserAgent);
         
         // Handle popup windows (required for Firebase signInWithPopup)
         webView.setWebChromeClient(new WebChromeClient() {
@@ -39,11 +37,8 @@ public class MainActivity extends BridgeActivity {
                 newSettings.setJavaScriptCanOpenWindowsAutomatically(true);
                 newSettings.setSupportMultipleWindows(true);
                 
-                // Apply User Agent spoofing to the popup window as well
-                String popupUserAgent = newSettings.getUserAgentString();
-                popupUserAgent = popupUserAgent.replaceAll("; wv\\)", ")")
-                                             .replaceAll("Version\\/\\d+\\.\\d+\\s+", "");
-                newSettings.setUserAgentString(popupUserAgent);
+                // Apply the same hardcoded User Agent to the popup window
+                newSettings.setUserAgentString(chromeUserAgent);
                 
                 newWebView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
