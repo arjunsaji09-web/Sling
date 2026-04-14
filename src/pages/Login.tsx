@@ -107,9 +107,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   };
 
   useEffect(() => {
-    // Check for file protocol (common in some APK builds)
-    if (window.location.protocol === 'file:') {
-      setError('Sling requires a secure web environment. Please open in a standard browser.');
+    // Check for file protocol or localhost (common in APK builds)
+    const isLocal = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
+    
+    if (isLocal) {
+      console.warn('Running on localhost/APK. Redirects may fail.');
     }
 
     // Handle redirect result
@@ -124,7 +126,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         }
       } catch (err: any) {
         console.error('Redirect login error:', err);
-        handleAuthError(err);
+        // If we are on localhost and get an error, it's likely the redirect failed
+        if (isLocal && (err.code === 'auth/auth-domain-config-required' || err.code === 'auth/operation-not-supported-in-this-environment')) {
+          setError('Google Login is not supported directly in the APK. Please use the "Open in Chrome" button below.');
+        } else {
+          handleAuthError(err);
+        }
       } finally {
         setLoading(false);
         setStatus('');
@@ -549,12 +556,16 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 </button>
                 {loading && (
                   <div className="mt-4 text-center animate-fade-in">
-                    <p className="text-[10px] text-gray-500 mb-2">Stuck? Try opening in browser</p>
+                    <p className="text-[10px] text-gray-500 mb-2">
+                      {window.location.hostname === 'localhost' 
+                        ? 'APK Login: Use Chrome for security' 
+                        : 'Stuck? Try opening in browser'}
+                    </p>
                     <div className="flex items-center justify-center gap-3">
                       <button
                         type="button"
                         onClick={() => window.open('https://ais-pre-jpjl6sl3ypg4jcpcon4egw-597038029842.asia-southeast1.run.app', '_blank')}
-                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-purple-400 hover:text-purple-300 transition-all"
+                        className="px-4 py-2 bg-purple-600 rounded-lg text-[10px] font-bold text-white hover:bg-purple-500 transition-all shadow-lg shadow-purple-500/20"
                       >
                         Open in Chrome
                       </button>
