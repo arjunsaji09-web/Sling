@@ -13,6 +13,9 @@ workflows:
       java: 17
       groups:
         - android-sdk
+        - signing
+      vars:
+        FNC_KEYSTORE_REF: sling_release_key
     scripts:
       - name: Install dependencies
         script: |
@@ -24,7 +27,7 @@ workflows:
         script: |
           npx cap copy android
           npx cap sync android
-      - name: Build Android APK
+      - name: Build and Sign Android APK
         script: |
           cd android
           # Fix line endings and permissions for the Gradle wrapper
@@ -32,10 +35,12 @@ workflows:
           chmod +x gradlew
           # Set SDK path
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          # Clean and Build the APK
-          ./gradlew clean assembleDebug --no-daemon --info --stacktrace || gradle clean assembleDebug --no-daemon --info --stacktrace
+          
+          # Build the Release APK
+          # Codemagic will automatically inject signing properties if configured in the UI
+          ./gradlew assembleRelease --no-daemon
     artifacts:
-      - android/app/build/outputs/apk/debug/app-debug.apk
+      - android/app/build/outputs/apk/release/app-release.apk
     publishing:
       email:
         recipients:
