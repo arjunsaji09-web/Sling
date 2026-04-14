@@ -22,6 +22,13 @@ public class MainActivity extends BridgeActivity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(true);
         
+        // Spoof User Agent to bypass "disallowed_useragent" error
+        String userAgent = settings.getUserAgentString();
+        // Remove "Version/X.X" and "wv" which identify it as a WebView
+        userAgent = userAgent.replaceAll("; wv\\)", ")")
+                             .replaceAll("Version\\/\\d+\\.\\d+\\s+", "");
+        settings.setUserAgentString(userAgent);
+        
         // Handle popup windows (required for Firebase signInWithPopup)
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
