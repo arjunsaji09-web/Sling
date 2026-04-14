@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">Sling</string>
     <string name="title_activity_main">Sling</string>
-    <string name="package_name">com.sling.app</string>
-    <string name="custom_url_scheme">com.sling.app</string>
+    <string name="package_name">Sling.msg</string>
+    <string name="custom_url_scheme">Sling.msg</string>
+    <string name="server_client_id">853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com</string>
 </resources>

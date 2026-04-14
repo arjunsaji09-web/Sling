@@ -84,9 +84,19 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
   useEffect(() => {
     // Initialize Google Auth for native
-    if (Capacitor.isNativePlatform()) {
-      GoogleAuth.initialize();
-    }
+    const initNativeAuth = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await GoogleAuth.initialize({
+            clientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
+          });
+          console.log('Google Auth initialized successfully');
+        } catch (e) {
+          console.error('Google Auth initialization failed:', e);
+        }
+      }
+    };
+    initNativeAuth();
     
     setIsLogin(isLoginMode);
     setError('');
@@ -205,19 +215,35 @@ export default function Login({ isLoginMode = true }: LoginProps) {
               setStatus('Success! Loading Sling...');
               await handleUserLogin(result.user);
             }
+          } else {
+            throw new Error('No identity token received from Google.');
           }
           setLoading(false);
           setStatus('');
           return;
         } catch (nativeErr: any) {
           console.error('Native Google Auth failed:', nativeErr);
-          // If native fails, we can try to fall back to web, but usually it means config is wrong
+          
+          // If user cancelled, just stop
           if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.includes('cancel')) {
             setLoading(false);
             setStatus('');
             return;
           }
-          // Continue to web fallback if it's not a cancellation
+
+          // Show the error to the user
+          setError(
+            <div className="flex flex-col gap-2">
+              <span className="font-bold">Native Login Failed</span>
+              <span className="text-xs opacity-80">Error: {nativeErr.message || JSON.stringify(nativeErr)}</span>
+              <span className="text-[10px] opacity-70">Falling back to web login...</span>
+            </div>
+          );
+          
+          // Wait a bit so they can read the error before fallback
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          setError('');
+          // Continue to web fallback
         }
       }
 
