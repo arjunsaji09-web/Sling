@@ -20,6 +20,10 @@ workflows:
           cd android && chmod +x gradlew
       - name: Build Android APK
         script: |
-          cd android && ./gradlew assembleRelease
+          cd android
+          # Explicitly set the SDK path for the build machine
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          # Clean and Build
+          ./gradlew clean assembleRelease --no-daemon
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
