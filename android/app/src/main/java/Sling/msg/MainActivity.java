@@ -1,4 +1,4 @@
-package com.sling.app;
+package Sling.msg;
 
 import android.os.Bundle;
 import android.os.Message;

@@ -1,13 +1,13 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.sling.app',
+  appId: 'Sling.msg',
   appName: 'Sling',
   webDir: 'dist',
   plugins: {
     GoogleAuth: {
       scopes: ['profile', 'email'],
-      serverClientId: '853101732270-p8p8p8p8p8p8p8p8p8p8p8p8p8p8p8p8.apps.googleusercontent.com',
+      serverClientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
       forceCodeForRefreshToken: true,
     },
   },

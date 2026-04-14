@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "853101732270",
+    "project_id": "gen-lang-client-0023601599",
+    "storage_bucket": "gen-lang-client-0023601599.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:853101732270:android:a9ddf483056de000af283f",
+        "android_client_info": {
+          "package_name": "Sling.msg"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "853101732270-36m3g2l67ormpbnns9bu15188din9uf8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "Sling.msg",
+            "certificate_hash": "5e8f16062e53cd44cd10246771e69d6063f31c86"
+          }
+        },
+        {
+          "client_id": "853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLxBqTBVkBGA0necmw3ccdo84u6SU0v38"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
