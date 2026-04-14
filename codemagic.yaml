@@ -20,13 +20,15 @@ workflows:
       - name: Install dependencies
         script: |
           npm install
-      - name: Generate Android Folder
+      - name: Force Clean and Generate Android
         script: |
           npm run build
           npx cap sync android
-      - name: Build and Sign Android APK
+      - name: Fix Permissions and Build
         script: |
-          cd android && chmod +x gradlew && ./gradlew assembleRelease
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
     artifacts:
       - android/app/build/outputs/apk/release/app-release.apk
     publishing:
