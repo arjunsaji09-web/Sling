@@ -41,6 +41,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | React.ReactNode>('');
   const [success, setSuccess] = useState('');
+  const [status, setStatus] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -106,12 +107,19 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   };
 
   useEffect(() => {
+    // Check for file protocol (common in some APK builds)
+    if (window.location.protocol === 'file:') {
+      setError('Sling requires a secure web environment. Please open in a standard browser.');
+    }
+
     // Handle redirect result
     const handleRedirect = async () => {
       try {
         setLoading(true);
+        setStatus('Checking login status...');
         const result = await getRedirectResult(auth);
         if (result) {
+          setStatus('Success! Loading profile...');
           await handleUserLogin(result.user);
         }
       } catch (err: any) {
@@ -119,6 +127,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         handleAuthError(err);
       } finally {
         setLoading(false);
+        setStatus('');
       }
     };
     handleRedirect();
@@ -181,35 +190,65 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     if (loading) return;
     setLoading(true);
     setError('');
+    setStatus('Connecting to Google...');
+    
     try {
       const provider = new GoogleAuthProvider();
-      // Remove prompt: 'select_account' to make it faster if user is already logged in
-      // provider.setCustomParameters({ prompt: 'select_account' });
+      // Re-enable select_account - it's much more reliable for fixing "invalid_request" errors
+      provider.setCustomParameters({ prompt: 'select_account' });
       
-      // Try popup first for EVERYONE. 
-      // Modern APKs/WebViews handle popups better than redirects which lose state.
-      try {
-        const result = await signInWithPopup(auth, provider);
-        if (result.user) {
-          await handleUserLogin(result.user);
-        }
-        setLoading(false);
-      } catch (popupErr: any) {
-        console.log('Popup failed or blocked:', popupErr.code);
-        
-        // Only fallback to redirect if popup is explicitly blocked
-        if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
-          await signInWithRedirect(auth, provider);
-        } else if (popupErr.code === 'auth/popup-closed-by-user') {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isWebView = (window as any).Android || (window as any).webkit || navigator.userAgent.includes('wv');
+      const isIframe = window.self !== window.top;
+
+      // In an iframe (like the AI Studio preview), we MUST use popup. Redirects will fail.
+      if (isIframe) {
+        try {
+          const result = await signInWithPopup(auth, provider);
+          if (result.user) {
+            setStatus('Success! Loading Sling...');
+            await handleUserLogin(result.user);
+          }
           setLoading(false);
-        } else {
-          // For other errors (like WebView not supporting popups), try redirect
-          await signInWithRedirect(auth, provider);
+          return;
+        } catch (popupErr: any) {
+          console.error('Iframe popup failed:', popupErr);
+          if (popupErr.code === 'auth/popup-blocked') {
+            setError('Popup blocked. Please allow popups for this site or open in a new tab.');
+          } else {
+            setError(`Login failed: ${popupErr.message}`);
+          }
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (isMobile || isWebView) {
+        setStatus('Redirecting...');
+        await signInWithRedirect(auth, provider);
+      } else {
+        // Desktop standard
+        try {
+          const result = await signInWithPopup(auth, provider);
+          if (result.user) {
+            setStatus('Success! Loading Sling...');
+            await handleUserLogin(result.user);
+          }
+          setLoading(false);
+        } catch (popupErr: any) {
+          console.log('Popup failed, trying redirect...', popupErr.code);
+          if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
+            setStatus('Redirecting...');
+            await signInWithRedirect(auth, provider);
+          } else {
+            throw popupErr;
+          }
         }
       }
     } catch (err: any) {
       handleAuthError(err);
       setLoading(false);
+      setStatus('');
     }
   };
 
@@ -482,7 +521,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                      <span>Redirecting...</span>
+                      <span>{status || 'Redirecting...'}</span>
                     </div>
                   ) : (
                     <>
@@ -510,14 +549,23 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 </button>
                 {loading && (
                   <div className="mt-4 text-center animate-fade-in">
-                    <p className="text-[10px] text-gray-500 mb-2">Stuck on the login page?</p>
-                    <button
-                      type="button"
-                      onClick={() => window.location.href = '/'}
-                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400 hover:text-white transition-all"
-                    >
-                      Return to App
-                    </button>
+                    <p className="text-[10px] text-gray-500 mb-2">Stuck? Try opening in browser</p>
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => window.open('https://ais-pre-jpjl6sl3ypg4jcpcon4egw-597038029842.asia-southeast1.run.app', '_blank')}
+                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-purple-400 hover:text-purple-300 transition-all"
+                      >
+                        Open in Chrome
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.location.href = '/'}
+                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400 hover:text-white transition-all"
+                      >
+                        Reset
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -757,9 +805,23 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
             {error && (
               <div className="text-red-400 text-xs mt-3 ml-1 flex flex-col gap-2">
-                <div className="flex items-center gap-1">
-                  <span className="w-1 h-1 bg-red-400 rounded-full" />
-                  {error}
+                <div className="flex items-start gap-1">
+                  <span className="w-1 h-1 bg-red-400 rounded-full mt-1.5 shrink-0" />
+                  <div className="flex-1">
+                    {error}
+                    {typeof error === 'string' && (error.includes('Authentication failed') || error.includes('Login failed')) && (
+                      <div className="mt-3 pt-3 border-t border-white/5">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2">Debug Info for Firebase Console:</p>
+                        <div className="space-y-2">
+                          <p className="text-[10px] text-gray-400">1. Add this domain to "Authorized Domains" in Firebase Auth Settings:</p>
+                          <code className="block p-2 bg-black/20 rounded text-[9px] text-purple-400 break-all">{window.location.hostname}</code>
+                          <p className="text-[10px] text-gray-400 mt-2">2. Ensure Google provider is enabled in Firebase Console.</p>
+                          <p className="text-[10px] text-gray-400 mt-2">3. In Google Cloud Console, add this origin to "Authorized JavaScript origins":</p>
+                          <code className="block p-2 bg-black/20 rounded text-[9px] text-purple-400 break-all">{window.location.origin}</code>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {typeof error === 'string' && error.includes('already registered') && (
                   <button 
