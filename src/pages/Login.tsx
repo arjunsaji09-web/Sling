@@ -107,11 +107,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   };
 
   useEffect(() => {
-    // Check for file protocol or localhost (common in APK builds)
+    // Check if running in Capacitor APK
+    const isCapacitor = (window as any).Capacitor !== undefined;
     const isLocal = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
     
-    if (isLocal) {
-      console.warn('Running on localhost/APK. Redirects may fail.');
+    if (isCapacitor) {
+      console.log('Running in Native APK mode');
     }
 
     // Handle redirect result
@@ -126,9 +127,9 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         }
       } catch (err: any) {
         console.error('Redirect login error:', err);
-        // If we are on localhost and get an error, it's likely the redirect failed
-        if (isLocal && (err.code === 'auth/auth-domain-config-required' || err.code === 'auth/operation-not-supported-in-this-environment')) {
-          setError('Google Login is not supported directly in the APK. Please use the "Open in Chrome" button below.');
+        // If we are in APK and redirect failed, it's common. We'll rely on popup next time.
+        if (isCapacitor && err.code === 'auth/operation-not-supported-in-this-environment') {
+          // Silent fail for redirect check in APK
         } else {
           handleAuthError(err);
         }
@@ -201,15 +202,13 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     
     try {
       const provider = new GoogleAuthProvider();
-      // Re-enable select_account - it's much more reliable for fixing "invalid_request" errors
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const isWebView = (window as any).Android || (window as any).webkit || navigator.userAgent.includes('wv');
+      const isCapacitor = (window as any).Capacitor !== undefined;
       const isIframe = window.self !== window.top;
 
-      // In an iframe (like the AI Studio preview), we MUST use popup. Redirects will fail.
-      if (isIframe) {
+      // For Native APK or Iframe, Popup is the only reliable way without losing app state
+      if (isCapacitor || isIframe) {
         try {
           const result = await signInWithPopup(auth, provider);
           if (result.user) {
@@ -219,22 +218,26 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           setLoading(false);
           return;
         } catch (popupErr: any) {
-          console.error('Iframe popup failed:', popupErr);
-          if (popupErr.code === 'auth/popup-blocked') {
-            setError('Popup blocked. Please allow popups for this site or open in a new tab.');
+          console.error('Popup failed:', popupErr);
+          // If popup is blocked in APK, we have to show the fallback
+          if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/operation-not-supported-in-this-environment') {
+            setStatus('');
+            setLoading(true); // Keep loading true to show the fallback buttons
+            setError('Google Login was blocked by the app. Please use the Chrome button below to log in securely.');
           } else {
-            setError(`Login failed: ${popupErr.message}`);
+            handleAuthError(popupErr);
+            setLoading(false);
           }
-          setLoading(false);
           return;
         }
       }
 
-      if (isMobile || isWebView) {
+      // Standard Web Flow
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobile) {
         setStatus('Redirecting...');
         await signInWithRedirect(auth, provider);
       } else {
-        // Desktop standard
         try {
           const result = await signInWithPopup(auth, provider);
           if (result.user) {
@@ -243,8 +246,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           }
           setLoading(false);
         } catch (popupErr: any) {
-          console.log('Popup failed, trying redirect...', popupErr.code);
-          if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
+          if (popupErr.code === 'auth/popup-blocked') {
             setStatus('Redirecting...');
             await signInWithRedirect(auth, provider);
           } else {
@@ -557,8 +559,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 {loading && (
                   <div className="mt-4 text-center animate-fade-in">
                     <p className="text-[10px] text-gray-500 mb-2">
-                      {window.location.hostname === 'localhost' 
-                        ? 'APK Login: Use Chrome for security' 
+                      {(window as any).Capacitor 
+                        ? 'Native APK: Use Chrome if login is blocked' 
                         : 'Stuck? Try opening in browser'}
                     </p>
                     <div className="flex items-center justify-center gap-3">
@@ -571,10 +573,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                       </button>
                       <button
                         type="button"
-                        onClick={() => window.location.href = '/'}
+                        onClick={() => {
+                          setLoading(false);
+                          setStatus('');
+                          setError('');
+                        }}
                         className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400 hover:text-white transition-all"
                       >
-                        Reset
+                        Cancel
                       </button>
                     </div>
                   </div>
