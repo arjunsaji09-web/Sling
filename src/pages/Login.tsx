@@ -202,11 +202,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     
     try {
       const provider = new GoogleAuthProvider();
-      // Force account selection to ensure a fresh state
       provider.setCustomParameters({ prompt: 'select_account' });
       
       // Use signInWithPopup as requested by the user for better APK compatibility
       try {
+        setStatus('Opening Google Sign-In...');
         const result = await signInWithPopup(auth, provider);
         if (result.user) {
           setStatus('Success! Loading Sling...');
@@ -216,7 +216,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       } catch (popupErr: any) {
         console.error('Popup failed:', popupErr);
         
-        // If popup is blocked or not supported, we show the fallback buttons
+        // If popup is blocked or not supported, we show a clear message
         if (popupErr.code === 'auth/popup-blocked' || 
             popupErr.code === 'auth/operation-not-supported-in-this-environment' ||
             popupErr.code === 'auth/internal-error') {
@@ -224,12 +224,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           setStatus('');
           setError(
             <div className="flex flex-col gap-2">
-              <span>Google Login was blocked or is not supported in this view.</span>
-              <span className="text-[10px] opacity-70">Please use the "Open in Chrome" button below to log in securely.</span>
+              <span>Google Login was blocked by the app.</span>
+              <span className="text-[10px] opacity-70">Please ensure you have the latest version of the app and try again.</span>
             </div>
           );
-          // Keep loading true so the fallback buttons remain visible
-          setLoading(true); 
+          setLoading(false); 
         } else if (popupErr.code === 'auth/popup-closed-by-user') {
           setLoading(false);
           setStatus('');
