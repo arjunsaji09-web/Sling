@@ -161,13 +161,13 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const handleAuthError = (err: any) => {
     console.error('Auth Error:', err);
     if (err.code === 'auth/popup-closed-by-user') {
-      setError('Login cancelled. Please complete the sign-in in the popup.');
+      setError('Login cancelled. Please complete the process in the Google window.');
     } else if (err.code === 'auth/unauthorized-domain') {
       setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to "Authorized Domains" in the Firebase Console.`);
     } else if (err.code === 'auth/popup-blocked') {
-      setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
+      setError('The Google window was blocked by your browser. Please allow popups for this site.');
     } else if (err.code === 'auth/operation-not-allowed') {
-      setError('Google Sign-In is not enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.');
+      setError('Google login is not enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.');
     } else if (err.code === 'auth/web-storage-unsupported') {
       setError('Your browser or APK does not support the required storage for login. Please try opening in a standard browser.');
     } else {
@@ -183,11 +183,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     
     try {
       const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
+      provider.setCustomParameters({ 
+        prompt: 'select_account',
+        context: 'continue'
+      });
       
       // Use signInWithPopup as requested by the user for better APK compatibility
       try {
-        setStatus('Opening Google Sign-In...');
+        setStatus('Opening Google...');
         const result = await signInWithPopup(auth, provider);
         if (result.user) {
           setStatus('Success! Loading Sling...');

@@ -555,7 +555,7 @@ export const translations = {
     username: 'Имя пользователя',
     email: 'Email',
     password: 'Пароль',
-    continue_google: 'Войти через Google',
+    continue_google: 'Продолжить через Google',
     how_to_use: 'Как пользоваться Sling',
     key_features: 'Основные функции',
     anonymous_messages: 'Анонимные сообщения',
