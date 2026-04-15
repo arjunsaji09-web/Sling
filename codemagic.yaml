@@ -15,6 +15,8 @@ workflows:
       - name: Assemble APK
         script: |
           cd android
+          # Print SHA-1 for Firebase configuration
+          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep SHA1
           gradle assembleDebug
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk

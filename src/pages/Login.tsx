@@ -211,8 +211,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isNative) {
         setStatus('Opening native account picker...');
         try {
-          // Ensure GoogleAuth is initialized with the correct client ID
-          // This can sometimes resolve Code 10 if the config wasn't picked up
+          // Initialize GoogleAuth explicitly
           await GoogleAuth.initialize({
             clientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
             scopes: ['profile', 'email'],
@@ -220,6 +219,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           });
           
           const googleUser = await GoogleAuth.signIn();
+          console.log('Native Google User:', googleUser);
+
           if (googleUser && googleUser.authentication.idToken) {
             setStatus('Authenticating with Sling...');
             const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
@@ -237,19 +238,21 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         } catch (nativeErr: any) {
           console.error('Native Google Auth failed:', nativeErr);
           
+          setLoading(false);
+          setStatus('');
+
           // If user cancelled, just stop
           if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.toLowerCase().includes('cancel')) {
-            setLoading(false);
-            setStatus('');
             return;
           }
           
-          // CRITICAL: Show the native error so we can debug why the picker isn't opening
-          alert(`Native Auth Error\nCode: ${nativeErr.code}\nMessage: ${nativeErr.message}`);
+          // Specific help for Code 10
+          if (String(nativeErr.code) === '10') {
+            alert('Error 10: Developer Error\n\nThis usually means the SHA-1 fingerprint in Firebase does not match this APK.\n\nI have added a script to your build process to print the correct SHA-1. Please check your latest Codemagic build logs for "Print SHA-1" and copy that value to Firebase.');
+          } else {
+            alert(`Native Auth Error\nCode: ${nativeErr.code}\nMessage: ${nativeErr.message}`);
+          }
           
-          // DO NOT fallback to web popup in APK, it will always fail with redirect_uri_mismatch
-          setLoading(false);
-          setStatus('');
           setError(`Native login failed: ${nativeErr.message}`);
           return;
         }
