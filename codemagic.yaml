@@ -7,14 +7,14 @@ workflows:
       node: 20
       java: 17
     scripts:
-      - name: Install dependencies
+      - name: Build and Sync
         script: |
           npm install
-      - name: Build Android APK
-        script: |
           npm run build
           npx cap sync android
+      - name: Assemble APK
+        script: |
           cd android
-          gradle assembleDebug
+          ./gradlew assembleDebug
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk

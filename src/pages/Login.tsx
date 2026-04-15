@@ -9,7 +9,9 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
-  signInWithCredential
+  signInWithCredential,
+  setPersistence,
+  browserLocalPersistence
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -200,128 +202,37 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     setStatus('Connecting to Google...');
     
     try {
-      // Check if running on native platform
-      const isNative = Capacitor.isNativePlatform();
+      // 1. Set persistence strategy immediately before login
+      // This ensures the auth state is persisted across page reloads/redirects
+      await setPersistence(auth, browserLocalPersistence);
       
-      if (isNative) {
-        setStatus('Opening native account picker...');
-        try {
-          const googleUser = await GoogleAuth.signIn();
-          if (googleUser && googleUser.authentication.idToken) {
-            setStatus('Authenticating with Sling...');
-            const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
-            const result = await signInWithCredential(auth, credential);
-            if (result.user) {
-              setStatus('Success! Loading Sling...');
-              await handleUserLogin(result.user);
-            }
-          } else {
-            throw new Error('No identity token received from Google.');
-          }
-          setLoading(false);
-          setStatus('');
-          return;
-        } catch (nativeErr: any) {
-          console.error('Native Google Auth failed:', nativeErr);
-          
-          // If user cancelled, just stop
-          if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.includes('cancel')) {
-            setLoading(false);
-            setStatus('');
-            return;
-          }
-
-          // Show the error to the user
-          const errorMsg = nativeErr.message || JSON.stringify(nativeErr);
-          setError(
-            <div className="flex flex-col gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
-              <div className="flex items-center gap-2 text-red-400 font-bold">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Native Login Failed</span>
-              </div>
-              <div className="text-[11px] text-gray-300 bg-black/40 p-3 rounded-xl font-mono break-all">
-                {errorMsg.includes('10') || errorMsg.includes('12500') 
-                  ? "ERROR 10/12500: SHA-1 Mismatch. Please ensure the Codemagic SHA-1 is added to Firebase Console."
-                  : `Error Details: ${errorMsg}`}
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => {
-                    setError('');
-                    setLoading(false);
-                    handleGoogleLogin();
-                  }}
-                  className="flex-1 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-white transition-all"
-                >
-                  Retry Native Login
-                </button>
-                <button 
-                  onClick={() => {
-                    setError('');
-                    setLoading(false);
-                  }}
-                  className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400 transition-all"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          );
-          
-          setLoading(false);
-          setStatus('');
-          // STOP HERE - do not fall back to web login automatically on native
-          // as it will likely be blocked by Google anyway.
-          return;
-        }
-      }
-
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ 
         prompt: 'select_account'
       });
       
-      // Use signInWithPopup as requested by the user for better APK compatibility
-      try {
-        setStatus('Opening Google...');
-        const result = await signInWithPopup(auth, provider);
-        if (result.user) {
-          setStatus('Success! Loading Sling...');
-          await handleUserLogin(result.user);
-        }
-        setLoading(false);
-      } catch (popupErr: any) {
-        console.error('Popup failed:', popupErr);
-        setStatus('');
-        setLoading(false);
-        
-        const errorCode = popupErr.code || 'unknown';
-        const errorMessage = popupErr.message || 'An unknown error occurred';
-        
-        setError(
-          <div className="flex flex-col gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <div className="flex items-center gap-2 text-red-400 font-bold">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Google Login Error</span>
-            </div>
-            <div className="text-[11px] font-mono bg-black/30 p-2 rounded text-gray-300 break-all">
-              Code: {errorCode}
-            </div>
-            <div className="text-[10px] opacity-80 text-gray-400">
-              {errorMessage}
-            </div>
-            {errorCode === 'auth/unauthorized-domain' && (
-              <div className="text-[9px] text-yellow-500 mt-1 bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
-                Tip: Add "{window.location.hostname}" to Authorized Domains in Firebase Console.
-              </div>
-            )}
-          </div>
-        );
+      // 2. Use signInWithPopup in a clean try-catch block
+      setStatus('Opening Google...');
+      const result = await signInWithPopup(auth, provider);
+      
+      if (result.user) {
+        setStatus('Success! Loading Sling...');
+        await handleUserLogin(result.user);
       }
-    } catch (err: any) {
-      handleAuthError(err);
       setLoading(false);
       setStatus('');
+    } catch (err: any) {
+      console.error('Auth Error:', err);
+      setLoading(false);
+      setStatus('');
+      
+      // 3. Use alert() to show error details as requested for debugging
+      const errorCode = err.code || 'unknown';
+      const errorMessage = err.message || 'An unknown error occurred';
+      alert(`Google Login Error\nCode: ${errorCode}\nMessage: ${errorMessage}`);
+      
+      // Also set the error in UI for visibility
+      setError(`Login failed: ${errorCode}`);
     }
   };
 
