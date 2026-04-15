@@ -211,8 +211,13 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isNative) {
         setStatus('Opening native account picker...');
         try {
-          // Initialize GoogleAuth explicitly if needed
-          await GoogleAuth.initialize();
+          // Ensure GoogleAuth is initialized with the correct client ID
+          // This can sometimes resolve Code 10 if the config wasn't picked up
+          await GoogleAuth.initialize({
+            clientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
+            scopes: ['profile', 'email'],
+            grantOfflineAccess: true,
+          });
           
           const googleUser = await GoogleAuth.signIn();
           if (googleUser && googleUser.authentication.idToken) {
