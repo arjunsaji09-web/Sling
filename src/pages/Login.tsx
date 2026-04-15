@@ -278,8 +278,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ 
-        prompt: 'select_account',
-        context: 'continue'
+        prompt: 'select_account'
       });
       
       // Use signInWithPopup as requested by the user for better APK compatibility
@@ -293,28 +292,31 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         setLoading(false);
       } catch (popupErr: any) {
         console.error('Popup failed:', popupErr);
+        setStatus('');
+        setLoading(false);
         
-        // If popup is blocked or not supported, we show a clear message
-        if (popupErr.code === 'auth/popup-blocked' || 
-            popupErr.code === 'auth/operation-not-supported-in-this-environment' ||
-            popupErr.code === 'auth/internal-error') {
-          
-          setStatus('');
-          setError(
-            <div className="flex flex-col gap-2">
-              <span>Google Login was blocked by the app.</span>
-              <span className="text-[10px] opacity-70">Please ensure you have the latest version of the app and try again.</span>
+        const errorCode = popupErr.code || 'unknown';
+        const errorMessage = popupErr.message || 'An unknown error occurred';
+        
+        setError(
+          <div className="flex flex-col gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+            <div className="flex items-center gap-2 text-red-400 font-bold">
+              <ShieldCheck className="w-4 h-4" />
+              <span>Google Login Error</span>
             </div>
-          );
-          setLoading(false); 
-        } else if (popupErr.code === 'auth/popup-closed-by-user') {
-          setLoading(false);
-          setStatus('');
-        } else {
-          handleAuthError(popupErr);
-          setLoading(false);
-          setStatus('');
-        }
+            <div className="text-[11px] font-mono bg-black/30 p-2 rounded text-gray-300 break-all">
+              Code: {errorCode}
+            </div>
+            <div className="text-[10px] opacity-80 text-gray-400">
+              {errorMessage}
+            </div>
+            {errorCode === 'auth/unauthorized-domain' && (
+              <div className="text-[9px] text-yellow-500 mt-1 bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
+                Tip: Add "{window.location.hostname}" to Authorized Domains in Firebase Console.
+              </div>
+            )}
+          </div>
+        );
       }
     } catch (err: any) {
       handleAuthError(err);
