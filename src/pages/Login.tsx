@@ -234,22 +234,37 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           // Show the error to the user
           const errorMsg = nativeErr.message || JSON.stringify(nativeErr);
           setError(
-            <div className="flex flex-col gap-2">
-              <span className="font-bold text-red-400">Native Login Failed</span>
-              <span className="text-[10px] opacity-90 bg-black/20 p-2 rounded">
+            <div className="flex flex-col gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
+              <div className="flex items-center gap-2 text-red-400 font-bold">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Native Login Failed</span>
+              </div>
+              <div className="text-[11px] text-gray-300 bg-black/40 p-3 rounded-xl font-mono break-all">
                 {errorMsg.includes('10') || errorMsg.includes('12500') 
-                  ? "Error 10/12500: This usually means your SHA-1 fingerprint is not registered in Firebase Console."
-                  : `Error: ${errorMsg}`}
-              </span>
-              <button 
-                onClick={() => {
-                  setError('');
-                  setLoading(false);
-                }}
-                className="text-[10px] text-purple-400 underline mt-1"
-              >
-                Try again
-              </button>
+                  ? "ERROR 10/12500: SHA-1 Mismatch. Please ensure the Codemagic SHA-1 is added to Firebase Console."
+                  : `Error Details: ${errorMsg}`}
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    setError('');
+                    setLoading(false);
+                    handleGoogleLogin();
+                  }}
+                  className="flex-1 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-white transition-all"
+                >
+                  Retry Native Login
+                </button>
+                <button 
+                  onClick={() => {
+                    setError('');
+                    setLoading(false);
+                  }}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400 transition-all"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           );
           
