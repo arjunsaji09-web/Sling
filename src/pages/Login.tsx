@@ -211,15 +211,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isNative) {
         setStatus('Opening native account picker...');
         try {
-          // Initialize GoogleAuth explicitly with BOTH clientId and serverClientId
-          // Some versions of the plugin prefer one over the other on Android
-          await GoogleAuth.initialize({
-            clientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
-            serverClientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
-            scopes: ['profile', 'email'],
-            forceCodeForRefreshToken: true,
-          });
-          
+          // Rely on capacitor.config.ts for initialization
           const googleUser = await GoogleAuth.signIn();
           console.log('Native Google User:', googleUser);
 
