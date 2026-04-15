@@ -203,17 +203,50 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     
     try {
       // 1. Persistence-First: Set persistence strategy immediately before login
-      // This ensures the auth state is saved to the device before the browser takes over
       await setPersistence(auth, browserLocalPersistence);
       
+      // 2. Check if running on native platform (APK)
+      const isNative = Capacitor.isNativePlatform();
+      
+      if (isNative) {
+        setStatus('Opening native account picker...');
+        try {
+          const googleUser = await GoogleAuth.signIn();
+          if (googleUser && googleUser.authentication.idToken) {
+            setStatus('Authenticating with Sling...');
+            const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+            const result = await signInWithCredential(auth, credential);
+            if (result.user) {
+              setStatus('Success! Loading Sling...');
+              await handleUserLogin(result.user);
+            }
+          } else {
+            throw new Error('No identity token received from Google.');
+          }
+          setLoading(false);
+          setStatus('');
+          return;
+        } catch (nativeErr: any) {
+          console.error('Native Google Auth failed:', nativeErr);
+          
+          // If user cancelled, just stop
+          if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.includes('cancel')) {
+            setLoading(false);
+            setStatus('');
+            return;
+          }
+          
+          // Fallback to web popup if native fails (though usually native is better)
+          console.log('Falling back to web popup...');
+        }
+      }
+
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ 
         prompt: 'select_account'
       });
       
-      // 2. The Fix: Setup a manual state listener to catch the user
-      // This ensures that even if the screen flickers or the state is 'lost,' 
-      // the app catches the user as soon as they are logged in.
+      // 3. The Fix: Setup a manual state listener to catch the user
       const unsubscribe = auth.onAuthStateChanged(async (user) => {
         if (user) {
           unsubscribe();
@@ -224,7 +257,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         }
       });
 
-      // 3. Trigger the popup
+      // 4. Trigger the popup
       setStatus('Opening Google...');
       await signInWithPopup(auth, provider);
       
