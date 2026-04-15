@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React, { useState, useEffect, createContext, useContext, ErrorInfo, ReactNode } from 'react';
-import { onAuthStateChanged, User, sendEmailVerification, signOut } from 'firebase/auth';
+import { onAuthStateChanged, User, sendEmailVerification, signOut, signInAnonymously } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import Login from './pages/Login';
@@ -323,6 +323,7 @@ export default function App() {
         setRole(null);
         setCustomAppUrl(null);
         setGlobalAppUrl(null);
+        
         setLoading(false);
         loadingRef.current = false;
         ['sling_username', 'sling_photo', 'sling_role', 'sling_messages', 'sling_app_url', 'sling_global_url'].forEach(safeRemoveItem);

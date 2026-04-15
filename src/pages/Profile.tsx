@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, limit, Timestamp, doc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -49,10 +49,12 @@ export default function Profile() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const [sendError, setSendError] = useState<string | null>(null);
   const [mode, setMode] = useState<'normal' | 'roast' | 'flirt'>('normal');
   const [cooldown, setCooldown] = useState(0);
   const [selfDestruct, setSelfDestruct] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const fetchingRef = useRef(false);
 
   useEffect(() => {
     if (cooldown > 0) {
@@ -72,21 +74,13 @@ export default function Profile() {
 
   useEffect(() => {
     const fetchUser = async () => {
-      if (!username) return;
+      if (!username || fetchingRef.current) return;
+      fetchingRef.current = true;
+      
       try {
         setLoading(true);
         setError('');
         
-        // Ensure user is signed in (even anonymously) to allow for blocking and security rules
-        if (!currentUser && !auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (authErr) {
-            console.error('Anonymous auth failed:', authErr);
-          }
-        }
-
-        // Use getDoc directly on the document ID for better performance and reliability
         const sanitizedUsername = username.replace(/\/$/, '').toLowerCase();
         let usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
         
@@ -94,7 +88,6 @@ export default function Profile() {
           usernameDoc = await getDoc(doc(db, 'usernames', username));
         }
 
-        // If still not found, try looking up by email (in case someone shared an email link)
         if (!usernameDoc.exists() && username.includes('@')) {
           const q = query(collection(db, 'usernames'), where('email', '==', username.toLowerCase()));
           const querySnapshot = await getDocs(q);
@@ -106,46 +99,57 @@ export default function Profile() {
         if (usernameDoc.exists()) {
           const userData = usernameDoc.data();
           setRecipientUid(userData.uid);
-          
-          if (userData.photoURL) {
-            setRecipientPhoto(userData.photoURL);
-          }
+          if (userData.photoURL) setRecipientPhoto(userData.photoURL);
         } else {
           setError('User not found');
         }
       } catch (err: any) {
         console.error('Error loading user profile:', err);
-        if (err.message?.includes('permission')) {
-          setError('Permission denied. Please try refreshing the page.');
-        } else {
-          setError('User not found or error loading profile');
-        }
+        handleFirestoreError(err, OperationType.GET, `usernames/${username}`);
+        setError('Permission denied or error loading profile');
       } finally {
         setLoading(false);
+        fetchingRef.current = false;
       }
     };
     fetchUser();
-  }, [username, currentUser]);
+  }, [username]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
     if (!recipientUid) return;
     if (cooldown > 0) {
-      setError(`Please wait ${cooldown}s before sending another message.`);
+      setSendError(`Please wait ${cooldown}s before sending another message.`);
       return;
     }
 
     setSending(true);
-    setError('');
+    setSendError(null);
 
     try {
+      // Ensure user is signed in (even anonymously)
+      if (!auth.currentUser) {
+        try {
+          await signInAnonymously(auth);
+        } catch (authErr: any) {
+          console.error('Anonymous auth failed:', authErr);
+          if (authErr.code === 'auth/admin-restricted-operation') {
+            setSendError('Anonymous messaging is currently disabled. Please contact the administrator to enable "Anonymous" sign-in in Firebase Console.');
+          } else {
+            setSendError('Authentication failed. Please try again.');
+          }
+          setSending(false);
+          return;
+        }
+      }
+
       // Check if blocked
-      if (currentUser && recipientUid) {
-        const blockId = `${recipientUid}_${currentUser.uid}`;
+      if (auth.currentUser && recipientUid) {
+        const blockId = `${recipientUid}_${auth.currentUser.uid}`;
         const blockDoc = await getDoc(doc(db, 'blocks', blockId));
         if (blockDoc.exists()) {
-          setError('You have been blocked by this user.');
+          setSendError('You have been blocked by this user.');
           setSending(false);
           return;
         }
@@ -157,7 +161,7 @@ export default function Profile() {
       const sentToday = parseInt(localStorage.getItem(limitKey) || '0');
       
       if (sentToday >= 100) {
-        setError(t('rate_limit'));
+        setSendError(t('rate_limit'));
         setSending(false);
         return;
       }
@@ -170,7 +174,7 @@ export default function Profile() {
         deviceInfo: getDeviceInfo(),
         mode,
         recipientUid,
-        senderUid: currentUser?.uid || null,
+        senderUid: auth.currentUser?.uid || null,
         voiceData: null,
         mediaData: null,
         mediaType: null,
@@ -188,7 +192,8 @@ export default function Profile() {
       setCooldown(10); // 10s cooldown
     } catch (err: any) {
       console.error('Send Error:', err);
-      setError(err.message || 'Failed to send message. Please try again.');
+      handleFirestoreError(err, OperationType.CREATE, 'messages');
+      setSendError('Failed to send message. Please check your connection and try again.');
     } finally {
       setSending(false);
     }
@@ -428,6 +433,17 @@ export default function Profile() {
                     </button>
                   ))}
                 </div>
+
+                {sendError && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-center gap-3 text-red-400 text-sm font-medium"
+                  >
+                    <AlertCircle className="w-5 h-5 shrink-0" />
+                    <p>{sendError}</p>
+                  </motion.div>
+                )}
 
                 <button
                   type="submit"
