@@ -211,11 +211,13 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isNative) {
         setStatus('Opening native account picker...');
         try {
-          // Initialize GoogleAuth explicitly
+          // Initialize GoogleAuth explicitly with BOTH clientId and serverClientId
+          // Some versions of the plugin prefer one over the other on Android
           await GoogleAuth.initialize({
             clientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
+            serverClientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
             scopes: ['profile', 'email'],
-            grantOfflineAccess: true,
+            forceCodeForRefreshToken: true,
           });
           
           const googleUser = await GoogleAuth.signIn();
@@ -248,7 +250,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           
           // Specific help for Code 10
           if (String(nativeErr.code) === '10') {
-            alert('Error 10: Developer Error\n\nThis usually means the SHA-1 fingerprint in Firebase does not match this APK.\n\nI have added a script to your build process to print the correct SHA-1. Please check your latest Codemagic build logs for "Print SHA-1" and copy that value to Firebase.');
+            console.error('Developer Error (10): Check SHA-1 and Support Email in Firebase.');
+            alert('Error 10: Configuration Mismatch\n\n1. Ensure "Support Email" is set in Firebase Settings.\n2. Ensure SHA-1 D95B8B93... is added to Firebase.\n3. Try clearing the app cache/data and restart.');
           } else {
             alert(`Native Auth Error\nCode: ${nativeErr.code}\nMessage: ${nativeErr.message}`);
           }
