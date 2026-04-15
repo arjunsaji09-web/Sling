@@ -1,71 +1,11 @@
 package Sling.msg;
 
 import android.os.Bundle;
-import android.os.Message;
-import android.view.ViewGroup;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.FrameLayout;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        // Enable JavaScript popups and multiple windows support
-        WebView webView = this.getBridge().getWebView();
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        settings.setSupportMultipleWindows(true);
-        
-        // Hardcoded modern Chrome User Agent to bypass Google's WebView detection
-        // This tells Google we are a real Chrome browser on a Pixel 7
-        String chromeUserAgent = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36";
-        settings.setUserAgentString(chromeUserAgent);
-        
-        // Handle popup windows (required for Firebase signInWithPopup)
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
-                final WebView newWebView = new WebView(MainActivity.this);
-                WebSettings newSettings = newWebView.getSettings();
-                newSettings.setJavaScriptEnabled(true);
-                newSettings.setJavaScriptCanOpenWindowsAutomatically(true);
-                newSettings.setSupportMultipleWindows(true);
-                newSettings.setDomStorageEnabled(true);
-                newSettings.setDatabaseEnabled(true);
-                newSettings.setAllowFileAccess(true);
-                
-                // Apply the same hardcoded User Agent to the popup window
-                newSettings.setUserAgentString(chromeUserAgent);
-                
-                newWebView.setLayoutParams(new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                ));
-                
-                final ViewGroup rootView = (ViewGroup) getWindow().getDecorView().findViewById(android.R.id.content);
-                rootView.addView(newWebView);
-                
-                newWebView.setWebChromeClient(new WebChromeClient() {
-                    @Override
-                    public void onCloseWindow(WebView window) {
-                        super.onCloseWindow(window);
-                        rootView.removeView(newWebView);
-                    }
-                });
-                
-                newWebView.setWebViewClient(new WebViewClient());
-
-                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
-                transport.setWebView(newWebView);
-                resultMsg.sendToTarget();
-                return true;
-            }
-        });
     }
 }

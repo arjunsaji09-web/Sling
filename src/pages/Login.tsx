@@ -211,6 +211,9 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isNative) {
         setStatus('Opening native account picker...');
         try {
+          // Initialize GoogleAuth explicitly if needed
+          await GoogleAuth.initialize();
+          
           const googleUser = await GoogleAuth.signIn();
           if (googleUser && googleUser.authentication.idToken) {
             setStatus('Authenticating with Sling...');
@@ -230,14 +233,20 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           console.error('Native Google Auth failed:', nativeErr);
           
           // If user cancelled, just stop
-          if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.includes('cancel')) {
+          if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.toLowerCase().includes('cancel')) {
             setLoading(false);
             setStatus('');
             return;
           }
           
-          // Fallback to web popup if native fails (though usually native is better)
-          console.log('Falling back to web popup...');
+          // CRITICAL: Show the native error so we can debug why the picker isn't opening
+          alert(`Native Auth Error\nCode: ${nativeErr.code}\nMessage: ${nativeErr.message}`);
+          
+          // DO NOT fallback to web popup in APK, it will always fail with redirect_uri_mismatch
+          setLoading(false);
+          setStatus('');
+          setError(`Native login failed: ${nativeErr.message}`);
+          return;
         }
       }
 
