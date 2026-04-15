@@ -217,9 +217,7 @@ export default function Dashboard() {
       setLastMessageCount(msgs.length);
       localStorage.setItem('sling_messages', JSON.stringify(msgs));
       setLoading(false);
-    }, (error) => {
-      // Don't throw here to prevent app crash, just log and set loading false
-      console.error('Dashboard Snapshot Error:', error);
+    }, () => {
       setLoading(false);
     });
 
@@ -506,25 +504,17 @@ export default function Dashboard() {
     setUpdatingDP(true);
     setUploadProgress(0);
     try {
-      console.log('Starting Upload');
       const storageRef = ref(storage, `profiles/${user.uid}`);
-      
       const uploadTask = uploadBytesResumable(storageRef, file);
       
-      // Monitor progress
       uploadTask.on('state_changed', 
         (snapshot) => {
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           setUploadProgress(Math.round(progress));
-        }, 
-        (error) => {
-          console.error('Upload Failed:', error);
         }
       );
 
       await uploadTask;
-      console.log('Upload Complete');
-      
       const url = await getDownloadURL(storageRef);
       
       // Optimistic UI update

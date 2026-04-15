@@ -73,14 +73,16 @@ export default function Profile() {
   useEffect(() => {
     const fetchUser = async () => {
       if (!username) return;
-      console.log('Fetching profile for username:', username);
       try {
+        // Ensure user is signed in (even anonymously) to allow for blocking and security rules
+        if (!currentUser && !auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+
         // Use getDoc directly on the document ID for better performance and reliability
-        // Remove trailing slashes and normalize to lowercase
         const sanitizedUsername = username.replace(/\/$/, '').toLowerCase();
         let usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
         
-        // Fallback for older users with mixed-case keys
         if (!usernameDoc.exists() && username !== sanitizedUsername) {
           usernameDoc = await getDoc(doc(db, 'usernames', username));
         }
@@ -88,35 +90,30 @@ export default function Profile() {
         if (usernameDoc.exists()) {
           const userData = usernameDoc.data();
           setRecipientUid(userData.uid);
-          console.log('User found, UID:', userData.uid);
           
-          // Try to get photoURL from username doc first (denormalized)
           if (userData.photoURL) {
             setRecipientPhoto(userData.photoURL);
           } else {
-            // Fallback to fetching from users collection (requires auth)
             try {
               const userDoc = await getDoc(doc(db, 'users', userData.uid));
               if (userDoc.exists()) {
                 setRecipientPhoto(userDoc.data().photoURL || null);
               }
             } catch (e) {
-              console.log('Could not fetch public profile from users collection (unauthenticated)');
+              // Silent fail
             }
           }
         } else {
-          console.warn('Username not found in database:', sanitizedUsername);
           setError('User not found');
         }
       } catch (err) {
-        console.error('Error fetching user:', err);
         setError('Error loading user');
       } finally {
         setLoading(false);
       }
     };
     fetchUser();
-  }, [username]);
+  }, [username, currentUser]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();

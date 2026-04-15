@@ -4,14 +4,10 @@ import {
   signInWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut,
-  signInWithCredential,
   setPersistence,
-  browserLocalPersistence
+  browserLocalPersistence,
+  getRedirectResult
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -24,7 +20,6 @@ import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
 import { Capacitor } from '@capacitor/core';
-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
 // Prefetch dashboard
 const prefetchDashboard = () => import('./Dashboard');
@@ -85,21 +80,6 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   }, [username, isLogin, isFinishingProfile]);
 
   useEffect(() => {
-    // Initialize Google Auth for native
-    const initNativeAuth = async () => {
-      if (Capacitor.isNativePlatform()) {
-        try {
-          await GoogleAuth.initialize({
-            clientId: '853101732270-jfb7s3s55ls87mo98kjbit2f6om572bp.apps.googleusercontent.com',
-          });
-          console.log('Google Auth initialized successfully');
-        } catch (e) {
-          console.error('Google Auth initialization failed:', e);
-        }
-      }
-    };
-    initNativeAuth();
-    
     setIsLogin(isLoginMode);
     setError('');
   }, [isLoginMode]);
@@ -139,23 +119,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     const handleRedirect = async () => {
       try {
         setLoading(true);
-        setStatus('Checking login status...');
         const result = await getRedirectResult(auth);
         if (result) {
-          setStatus('Success! Loading profile...');
           await handleUserLogin(result.user);
         }
       } catch (err: any) {
-        console.error('Redirect login error:', err);
-        // If we are in APK and redirect failed, it's common. We'll rely on popup next time.
-        if (isCapacitor && err.code === 'auth/operation-not-supported-in-this-environment') {
-          // Silent fail for redirect check in APK
-        } else {
-          handleAuthError(err);
-        }
+        // Silent fail for redirect check
       } finally {
         setLoading(false);
-        setStatus('');
       }
     };
     handleRedirect();
@@ -179,121 +150,12 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   };
 
   const handleAuthError = (err: any) => {
-    console.error('Auth Error:', err);
-    if (err.code === 'auth/popup-closed-by-user') {
-      setError('Login cancelled. Please complete the process in the Google window.');
-    } else if (err.code === 'auth/unauthorized-domain') {
+    if (err.code === 'auth/unauthorized-domain') {
       setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to "Authorized Domains" in the Firebase Console.`);
-    } else if (err.code === 'auth/popup-blocked') {
-      setError('The Google window was blocked by your browser. Please allow popups for this site.');
-    } else if (err.code === 'auth/operation-not-allowed') {
-      setError('Google login is not enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.');
     } else if (err.code === 'auth/web-storage-unsupported') {
       setError('Your browser or APK does not support the required storage for login. Please try opening in a standard browser.');
     } else {
       setError(err.message || 'Authentication failed');
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    if (loading) return;
-    setLoading(true);
-    setError('');
-    setStatus('Connecting to Google...');
-    
-    try {
-      // 1. Persistence-First: Set persistence strategy immediately before login
-      await setPersistence(auth, browserLocalPersistence);
-      
-      // 2. Check if running on native platform (APK)
-      const isNative = Capacitor.isNativePlatform();
-      
-      if (isNative) {
-        setStatus('Opening native account picker...');
-        try {
-          // Rely on capacitor.config.ts for initialization
-          const googleUser = await GoogleAuth.signIn();
-          console.log('Native Google User:', googleUser);
-
-          if (googleUser && googleUser.authentication.idToken) {
-            setStatus('Authenticating with Sling...');
-            const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
-            const result = await signInWithCredential(auth, credential);
-            if (result.user) {
-              setStatus('Success! Loading Sling...');
-              await handleUserLogin(result.user);
-            }
-          } else {
-            throw new Error('No identity token received from Google.');
-          }
-          setLoading(false);
-          setStatus('');
-          return;
-        } catch (nativeErr: any) {
-          console.error('Native Google Auth failed:', nativeErr);
-          
-          setLoading(false);
-          setStatus('');
-
-          // If user cancelled, just stop
-          if (nativeErr.code === 'CHANCE_CANCELLED' || nativeErr.message?.toLowerCase().includes('cancel')) {
-            return;
-          }
-          
-          // Specific help for Code 10
-          if (String(nativeErr.code) === '10') {
-            console.error('Developer Error (10): Check SHA-1 and Support Email in Firebase.');
-            alert('Error 10: Configuration Mismatch\n\n1. Ensure "Support Email" is set in Firebase Settings.\n2. Ensure SHA-1 D95B8B93... is added to Firebase.\n3. Try clearing the app cache/data and restart.');
-          } else {
-            alert(`Native Auth Error\nCode: ${nativeErr.code}\nMessage: ${nativeErr.message}`);
-          }
-          
-          setError(`Native login failed: ${nativeErr.message}`);
-          return;
-        }
-      }
-
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ 
-        prompt: 'select_account'
-      });
-      
-      // 3. The Fix: Setup a manual state listener to catch the user
-      const unsubscribe = auth.onAuthStateChanged(async (user) => {
-        if (user) {
-          unsubscribe();
-          setStatus('Success! Loading Sling...');
-          await handleUserLogin(user);
-          setLoading(false);
-          setStatus('');
-        }
-      });
-
-      // 4. Trigger the popup
-      setStatus('Opening Google...');
-      await signInWithPopup(auth, provider);
-      
-    } catch (err: any) {
-      console.error('Auth Error:', err);
-      
-      // 4. Fallback: Clear local storage if it's a state or internal error
-      if (err.code === 'auth/internal-error' || err.message?.includes('state') || err.code === 'auth/network-request-failed') {
-        localStorage.clear();
-        console.warn('Cleared local storage due to auth error, ready for retry.');
-      }
-
-      setLoading(false);
-      setStatus('');
-      
-      // 5. Error Handling: Show exact error code and message via alert
-      const errorCode = err.code || 'unknown';
-      const errorMessage = err.message || 'An unknown error occurred';
-      
-      // Only alert if it's not a user cancellation
-      if (errorCode !== 'auth/popup-closed-by-user') {
-        alert(`Google Login Error\nCode: ${errorCode}\nMessage: ${errorMessage}`);
-        setError(`Login failed: ${errorCode}`);
-      }
     }
   };
 

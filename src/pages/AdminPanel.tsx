@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { motion } from 'framer-motion';
 import { Shield, Users, MessageSquare, Trash2, Search, ArrowLeft, AlertTriangle, UserX, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<any[]>([]);
@@ -11,6 +12,23 @@ export default function AdminPanel() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'users' | 'messages' | 'reports'>('users');
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    onConfirm: () => void;
+    type?: 'danger' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    cancelText: '',
+    onConfirm: () => {}
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,13 +67,23 @@ export default function AdminPanel() {
   };
 
   const handleDeleteMessage = async (msgId: string) => {
-    if (!window.confirm('Delete this message?')) return;
-    try {
-      await deleteDoc(doc(db, 'messages', msgId));
-      setMessages(messages.filter(m => m.id !== msgId));
-    } catch (err) {
-      console.error('Error deleting message:', err);
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Delete Message',
+      message: 'Are you sure you want to delete this message? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger',
+      onConfirm: async () => {
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await deleteDoc(doc(db, 'messages', msgId));
+          setMessages(messages.filter(m => m.id !== msgId));
+        } catch (err) {
+          // Silent fail
+        }
+      }
+    });
   };
 
   const handleResolveReport = async (reportId: string) => {
@@ -237,6 +265,10 @@ export default function AdminPanel() {
             )}
           </div>
         )}
+        <ConfirmDialog 
+          {...confirmConfig} 
+          onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} 
+        />
       </main>
     </div>
   );
