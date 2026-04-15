@@ -227,32 +227,31 @@ export default function Dashboard() {
   useEffect(() => {
     const searchUsers = async () => {
       if (searchQuery.length === 0) {
-        // Fetch 5 recent users as suggestions
+        // Fetch 20 recent users as suggestions
         setSearching(true);
         try {
           const q = query(
             collection(db, 'usernames'),
-            limit(10)
+            limit(20)
           );
           const snapshot = await getDocs(q);
-          const results = await Promise.all(snapshot.docs.map(async (d) => {
-            const uid = d.data().uid;
-            const userDoc = await getDoc(doc(db, 'users', uid));
+          const results = snapshot.docs.map((d) => {
+            const data = d.data();
             return { 
               username: d.id,
-              photoURL: userDoc.exists() ? userDoc.data().photoURL : null
+              photoURL: data.photoURL || null
             };
-          }));
+          });
           setSearchResults(results.filter(r => r.username.toLowerCase() !== username?.toLowerCase()));
         } catch (err) {
-          console.error(err);
+          console.error('Search suggestions failed:', err);
         } finally {
           setSearching(false);
         }
         return;
       }
 
-      if (searchQuery.length < 2) {
+      if (searchQuery.length < 1) {
         setSearchResults([]);
         return;
       }
@@ -264,23 +263,21 @@ export default function Dashboard() {
           orderBy('__name__'),
           where('__name__', '>=', searchQuery.toLowerCase()),
           where('__name__', '<=', searchQuery.toLowerCase() + '\uf8ff'),
-          limit(5)
+          limit(10)
         );
         const snapshot = await getDocs(q);
         
-        // Fetch photoURLs for the found users
-        const results = await Promise.all(snapshot.docs.map(async (d) => {
-          const uid = d.data().uid;
-          const userDoc = await getDoc(doc(db, 'users', uid));
+        const results = snapshot.docs.map((d) => {
+          const data = d.data();
           return { 
             username: d.id,
-            photoURL: userDoc.exists() ? userDoc.data().photoURL : null
+            photoURL: data.photoURL || null
           };
-        }));
+        });
         
         setSearchResults(results.filter(r => r.username.toLowerCase() !== username?.toLowerCase()));
       } catch (err) {
-        console.error(err);
+        console.error('Search failed:', err);
       } finally {
         setSearching(false);
       }
