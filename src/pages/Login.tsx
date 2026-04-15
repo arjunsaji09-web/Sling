@@ -202,8 +202,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     setStatus('Connecting to Google...');
     
     try {
-      // 1. Set persistence strategy immediately before login
-      // This ensures the auth state is persisted across page reloads/redirects
+      // 1. Persistence-First: Set persistence strategy immediately before login
+      // This ensures the auth state is saved to the device before the browser takes over
       await setPersistence(auth, browserLocalPersistence);
       
       const provider = new GoogleAuthProvider();
@@ -211,28 +211,44 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         prompt: 'select_account'
       });
       
-      // 2. Use signInWithPopup in a clean try-catch block
+      // 2. The Fix: Setup a manual state listener to catch the user
+      // This ensures that even if the screen flickers or the state is 'lost,' 
+      // the app catches the user as soon as they are logged in.
+      const unsubscribe = auth.onAuthStateChanged(async (user) => {
+        if (user) {
+          unsubscribe();
+          setStatus('Success! Loading Sling...');
+          await handleUserLogin(user);
+          setLoading(false);
+          setStatus('');
+        }
+      });
+
+      // 3. Trigger the popup
       setStatus('Opening Google...');
-      const result = await signInWithPopup(auth, provider);
+      await signInWithPopup(auth, provider);
       
-      if (result.user) {
-        setStatus('Success! Loading Sling...');
-        await handleUserLogin(result.user);
-      }
-      setLoading(false);
-      setStatus('');
     } catch (err: any) {
       console.error('Auth Error:', err);
+      
+      // 4. Fallback: Clear local storage if it's a state or internal error
+      if (err.code === 'auth/internal-error' || err.message?.includes('state') || err.code === 'auth/network-request-failed') {
+        localStorage.clear();
+        console.warn('Cleared local storage due to auth error, ready for retry.');
+      }
+
       setLoading(false);
       setStatus('');
       
-      // 3. Use alert() to show error details as requested for debugging
+      // 5. Error Handling: Show exact error code and message via alert
       const errorCode = err.code || 'unknown';
       const errorMessage = err.message || 'An unknown error occurred';
-      alert(`Google Login Error\nCode: ${errorCode}\nMessage: ${errorMessage}`);
       
-      // Also set the error in UI for visibility
-      setError(`Login failed: ${errorCode}`);
+      // Only alert if it's not a user cancellation
+      if (errorCode !== 'auth/popup-closed-by-user') {
+        alert(`Google Login Error\nCode: ${errorCode}\nMessage: ${errorMessage}`);
+        setError(`Login failed: ${errorCode}`);
+      }
     }
   };
 
