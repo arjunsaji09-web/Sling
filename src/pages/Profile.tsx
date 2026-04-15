@@ -74,9 +74,16 @@ export default function Profile() {
     const fetchUser = async () => {
       if (!username) return;
       try {
+        setLoading(true);
+        setError('');
+        
         // Ensure user is signed in (even anonymously) to allow for blocking and security rules
         if (!currentUser && !auth.currentUser) {
-          await signInAnonymously(auth);
+          try {
+            await signInAnonymously(auth);
+          } catch (authErr) {
+            console.error('Anonymous auth failed:', authErr);
+          }
         }
 
         // Use getDoc directly on the document ID for better performance and reliability
@@ -86,6 +93,15 @@ export default function Profile() {
         if (!usernameDoc.exists() && username !== sanitizedUsername) {
           usernameDoc = await getDoc(doc(db, 'usernames', username));
         }
+
+        // If still not found, try looking up by email (in case someone shared an email link)
+        if (!usernameDoc.exists() && username.includes('@')) {
+          const q = query(collection(db, 'usernames'), where('email', '==', username.toLowerCase()));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            usernameDoc = querySnapshot.docs[0];
+          }
+        }
         
         if (usernameDoc.exists()) {
           const userData = usernameDoc.data();
@@ -93,21 +109,17 @@ export default function Profile() {
           
           if (userData.photoURL) {
             setRecipientPhoto(userData.photoURL);
-          } else {
-            try {
-              const userDoc = await getDoc(doc(db, 'users', userData.uid));
-              if (userDoc.exists()) {
-                setRecipientPhoto(userDoc.data().photoURL || null);
-              }
-            } catch (e) {
-              // Silent fail
-            }
           }
         } else {
           setError('User not found');
         }
-      } catch (err) {
-        setError('Error loading user');
+      } catch (err: any) {
+        console.error('Error loading user profile:', err);
+        if (err.message?.includes('permission')) {
+          setError('Permission denied. Please try refreshing the page.');
+        } else {
+          setError('User not found or error loading profile');
+        }
       } finally {
         setLoading(false);
       }
@@ -196,10 +208,22 @@ export default function Profile() {
         <div className="glass p-12 rounded-[2rem] text-center max-w-sm">
           <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">{error}</h2>
-          <p className="text-gray-400 mb-8">The user you're looking for doesn't exist or has been removed.</p>
-          <Link to="/" className="gradient-bg px-8 py-3 rounded-xl font-bold inline-block">
-            Go Home
-          </Link>
+          <p className="text-gray-400 mb-8">
+            {error.includes('not found') 
+              ? "The user you're looking for doesn't exist or has been removed." 
+              : "We encountered an issue loading this profile. Please try again."}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => window.location.reload()} 
+              className="gradient-bg px-8 py-3 rounded-xl font-bold"
+            >
+              Try Again
+            </button>
+            <Link to="/" className="text-gray-500 hover:text-white transition-colors text-sm font-bold">
+              Go Home
+            </Link>
+          </div>
         </div>
       </div>
     );

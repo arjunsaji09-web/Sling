@@ -431,6 +431,15 @@ export default function Dashboard() {
       // Remove trailing slash
       formattedUrl = formattedUrl.replace(/\/$/, '');
       
+      // Validation: Ensure it's not pointing to a subpage
+      if (formattedUrl.toLowerCase().endsWith('/dashboard') || 
+          formattedUrl.toLowerCase().endsWith('/login') || 
+          formattedUrl.toLowerCase().endsWith('/signup')) {
+        showToast('Please use the base URL of your app (e.g., https://your-app.run.app)', 'error');
+        setSavingUrl(false);
+        return;
+      }
+      
       if (saveGlobally && role === 'admin') {
         await setDoc(doc(db, 'settings', 'config'), {
           publicUrl: formattedUrl,
@@ -1006,6 +1015,7 @@ export default function Dashboard() {
                         <button 
                           onClick={() => {
                             setNewAppUrl(globalAppUrl || customAppUrl || '');
+                            setSaveGlobally(true);
                             setShowUrlFixer(true);
                           }}
                           className="flex-1 bg-white/5 border border-white/10 text-theme py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all"

@@ -209,29 +209,45 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    if (!isLogin && !isFinishingProfile && (!cleanEmail || !cleanEmail.includes('@'))) {
-      setError('Please enter a valid email address');
-      return;
+    if (!isLogin && !isFinishingProfile) {
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        setError('Please enter a valid email address');
+        return;
+      }
+      if (sanitizedUsername.length < 3) {
+        setError('Username must be at least 3 characters');
+        return;
+      }
+      if (cleanPassword.length < 6) {
+        setError('Password must be at least 6 characters');
+        return;
+      }
+      if (cleanPassword !== confirmPassword.trim()) {
+        setError('Passwords do not match');
+        return;
+      }
     }
 
-    if (sanitizedUsername.length < 3 && !isEmailInput) {
-      setError('Username must be at least 3 characters');
-      return;
+    if (isFinishingProfile) {
+      if (sanitizedUsername.length < 3) {
+        setError('Username must be at least 3 characters');
+        return;
+      }
+      if (!cleanPassword) {
+        setError('Please set a password for your account');
+        return;
+      }
     }
 
-    if (!cleanPassword) {
-      setError('Please enter your password');
-      return;
-    }
-    
-    if (!isLogin && cleanPassword.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
-    if (!isLogin && !isFinishingProfile && cleanPassword !== confirmPassword.trim()) {
-      setError('Passwords do not match');
-      return;
+    if (isLogin) {
+      if (!username.trim()) {
+        setError('Please enter your username or email');
+        return;
+      }
+      if (!cleanPassword) {
+        setError('Please enter your password');
+        return;
+      }
     }
     
     setLoading(true);
@@ -437,7 +453,10 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   name="username"
                   autoComplete="username email"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError('');
+                  }}
                   placeholder={isLogin ? "yourname or email@example.com" : "yourname"}
                   maxLength={isLogin ? 50 : 20}
                   className="w-full input-theme rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
@@ -465,47 +484,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     name="email"
                     autoComplete="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError('');
+                    }}
                     placeholder="email@example.com"
                     className="w-full input-theme rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
                     disabled={loading}
                   />
-                </div>
-              </div>
-            )}
-
-            {!isLogin && (
-              <div className="space-y-4 mb-4">
-                <div className="flex flex-col items-center gap-3 p-4 bg-theme rounded-2xl border border-white/10">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden border-2 border-white/10">
-                    <img 
-                      src={`https://api.dicebear.com/7.x/${avatarType === 'boy' ? 'micah' : avatarType === 'girl' ? 'lorelei' : 'avataaars'}/svg?seed=${username || 'preview'}`} 
-                      alt="Avatar Preview" 
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="flex gap-2 w-full">
-                    {[
-                      { id: 'boy', label: 'Boy', icon: '👦' },
-                      { id: 'girl', label: 'Girl', icon: '👧' },
-                      { id: 'neutral', label: 'Neutral', icon: '👤' }
-                    ].map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setAvatarType(opt.id as any)}
-                        className={cn(
-                          "flex-1 py-2 rounded-xl text-[10px] font-bold transition-all border",
-                          avatarType === opt.id 
-                            ? "bg-purple-500/20 border-purple-500 text-white" 
-                            : "bg-white/5 border-white/10 text-gray-500 hover:text-gray-300"
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
             )}
@@ -520,7 +506,10 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError('');
+                    }}
                     placeholder="••••••••"
                     autoComplete={isLogin ? "current-password" : "new-password"}
                     onKeyUp={checkCapsLock}
@@ -601,7 +590,10 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                       <input
                         type={showPassword ? "text" : "password"}
                         value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      setError('');
+                    }}
                         placeholder="••••••••"
                         onKeyUp={checkCapsLock}
                         className="w-full input-theme rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-500"
@@ -623,6 +615,42 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {!isLogin && (
+              <div className="space-y-4 mb-4">
+                <div className="flex flex-col items-center gap-3 p-4 bg-theme rounded-2xl border border-white/10">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center overflow-hidden border-2 border-white/10">
+                    <img 
+                      src={`https://api.dicebear.com/7.x/${avatarType === 'boy' ? 'micah' : avatarType === 'girl' ? 'lorelei' : 'avataaars'}/svg?seed=${username || 'preview'}`} 
+                      alt="Avatar Preview" 
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="flex gap-2 w-full">
+                    {[
+                      { id: 'boy', label: 'Boy', icon: '👦' },
+                      { id: 'girl', label: 'Girl', icon: '👧' },
+                      { id: 'neutral', label: 'Neutral', icon: '👤' }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setAvatarType(opt.id as any)}
+                        className={cn(
+                          "flex-1 py-2 rounded-xl text-[10px] font-bold transition-all border",
+                          avatarType === opt.id 
+                            ? "bg-purple-500/20 border-purple-500 text-white" 
+                            : "bg-white/5 border-white/10 text-gray-500 hover:text-gray-300"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 

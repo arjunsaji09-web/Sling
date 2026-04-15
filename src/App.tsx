@@ -105,7 +105,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       try {
         const errorInfo = JSON.parse(this.state.error.message);
         if (errorInfo.error.includes('insufficient permissions')) {
-          errorMessage = 'You do not have permission to access this data. Please try logging in again.';
+          errorMessage = 'Access denied. This might happen if you are trying to view private data or if your session has expired. Please try refreshing or logging in again.';
         }
       } catch (e) {
         // Not a JSON error
