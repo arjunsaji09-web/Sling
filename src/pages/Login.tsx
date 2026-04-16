@@ -14,7 +14,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { useAuth, useLanguage } from '../App';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail, Eye, EyeOff, HelpCircle } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Lock, User as UserIcon, MessageCircle, Mail, Eye, EyeOff, HelpCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
@@ -154,6 +154,8 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to "Authorized Domains" in the Firebase Console.`);
     } else if (err.code === 'auth/web-storage-unsupported') {
       setError('Your browser or APK does not support the required storage for login. Please try opening in a standard browser.');
+    } else if (err.message?.includes('offline') || err.message?.includes('network')) {
+      setError('You are currently offline. Please check your internet connection and try again.');
     } else {
       setError(err.message || 'Authentication failed');
     }
@@ -365,7 +367,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                         err.code === 'auth/invalid-credential' ||
                         err.code === 'auth/invalid-email';
 
-      if (isInvalid) {
+      const isOfflineError = err.message?.includes('offline') || err.message?.includes('network');
+      
+      if (isOfflineError) {
+        setError('Connection failed. Please check your internet and try again.');
+      } else if (isInvalid) {
         setError(
           <div className="flex flex-col gap-2">
             <span>Incorrect password or account name.</span>
@@ -683,43 +689,48 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             )}
 
             {error && (
-              <div className="text-red-400 text-xs mt-3 ml-1 flex flex-col gap-2">
-                <div className="flex items-start gap-1">
-                  <span className="w-1 h-1 bg-red-400 rounded-full mt-1.5 shrink-0" />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl mb-6 relative overflow-hidden"
+              >
+                <div className="flex items-start gap-3 relative z-10">
+                  <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center shrink-0">
+                    <AlertCircle className="w-4 h-4 text-red-400" />
+                  </div>
                   <div className="flex-1">
-                    {error}
-                    {typeof error === 'string' && (error.includes('Authentication failed') || error.includes('Login failed')) && (
-                      <div className="mt-3 pt-3 border-t border-white/5">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2">Debug Info for Firebase Console:</p>
-                        <div className="space-y-2">
-                          <p className="text-[10px] text-gray-400">1. Add this domain to "Authorized Domains" in Firebase Auth Settings:</p>
-                          <code className="block p-2 bg-black/20 rounded text-[9px] text-purple-400 break-all">{window.location.hostname}</code>
-                          <p className="text-[10px] text-gray-400 mt-2">2. Ensure Google provider is enabled in Firebase Console.</p>
-                          <p className="text-[10px] text-gray-400 mt-2">3. In Google Cloud Console, add this origin to "Authorized JavaScript origins":</p>
-                          <code className="block p-2 bg-black/20 rounded text-[9px] text-purple-400 break-all">{window.location.origin}</code>
-                        </div>
-                      </div>
+                    <p className="text-red-400 text-xs font-bold uppercase tracking-wider mb-1">{t('issue_encountered')}</p>
+                    <div className="text-gray-400 text-[11px] leading-relaxed">
+                      {error}
+                    </div>
+                    {typeof error === 'string' && error.toLowerCase().includes('offline') && (
+                      <button 
+                        type="button"
+                        onClick={() => handleAuth({ preventDefault: () => {} } as any)}
+                        className="mt-3 text-red-400 font-bold hover:underline text-[10px] flex items-center gap-1 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 hover:bg-red-500/20 transition-all"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        {t('retry_connection')}
+                      </button>
+                    )}
+                    {typeof error === 'string' && error.includes('already registered') && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsLogin(true);
+                          setError('');
+                          setPassword('');
+                          setConfirmPassword('');
+                          if (email) setUsername(email);
+                        }}
+                        className="mt-3 text-purple-400 font-bold hover:underline text-[10px] flex items-center gap-1 bg-purple-500/10 px-3 py-1.5 rounded-lg border border-purple-500/20 hover:bg-purple-500/20 transition-all"
+                      >
+                        {t('switch_to_login')}
+                      </button>
                     )}
                   </div>
                 </div>
-                {typeof error === 'string' && error.includes('already registered') && (
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setIsLogin(true);
-                      setError('');
-                      setPassword('');
-                      setConfirmPassword('');
-                      // If they were signing up, the email state is already set.
-                      // We set the username to the email so it shows up in the login box.
-                      if (email) setUsername(email);
-                    }}
-                    className="text-purple-400 font-bold hover:underline text-left ml-2"
-                  >
-                    Click here to switch to Login tab →
-                  </button>
-                )}
-              </div>
+              </motion.div>
             )}
 
             <button
@@ -727,14 +738,24 @@ export default function Login({ isLoginMode = true }: LoginProps) {
               disabled={loading}
               onMouseEnter={prefetchDashboard}
               className={cn(
-                "w-full gradient-bg py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 mt-4",
+                "w-full gradient-bg h-16 rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 mt-4 group overflow-hidden relative",
                 loading && "animate-pulse"
               )}
             >
               {loading 
-                ? (isFinishingProfile ? 'Saving profile...' : (isLogin ? 'Logging in...' : 'Creating account...')) 
-                : (isFinishingProfile ? 'Finish Setup' : (isLogin ? 'Login' : 'Create Account'))}
-              {!loading && <ArrowRight className="w-4 h-4" />}
+                ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>{isFinishingProfile ? 'Saving...' : (isLogin ? 'Logging in...' : 'Creating...')}</span>
+                  </div>
+                ) 
+                : (
+                  <>
+                    <span className="relative z-10">{isFinishingProfile ? 'Finish Setup' : (isLogin ? 'Login' : 'Create Account')}</span>
+                    <ArrowRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
+                    <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </>
+                )}
             </button>
 
             {!isFinishingProfile && (

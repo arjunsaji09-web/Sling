@@ -39,7 +39,9 @@ import {
   Globe,
   AlertTriangle,
   RefreshCw,
-  UserX
+  UserX,
+  CheckCircle2,
+  ChevronRight
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -88,6 +90,39 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{username: string, photoURL?: string}[]>([]);
   const [searching, setSearching] = useState(false);
+  const [revealingHint, setRevealingHint] = useState<string | null>(null);
+  const [revealTimer, setRevealTimer] = useState(0);
+  const [revealedHints, setRevealedHints] = useState<{ [key: string]: { city: string, device: string } }>({});
+
+  const MONETAG_DIRECT_LINK = "https://omg10.com/4/10885845";
+
+  useEffect(() => {
+    if (revealTimer > 0) {
+      const timer = setTimeout(() => {
+        if (revealTimer === 1 && revealingHint) {
+          const msg = messages.find(m => m.id === revealingHint);
+          if (msg) {
+            setRevealedHints(prev => ({
+              ...prev,
+              [msg.id]: {
+                city: (msg as any).senderCity || 'Unknown City',
+                device: msg.deviceInfo || 'Unknown Device'
+              }
+            }));
+          }
+          setRevealingHint(null);
+        }
+        setRevealTimer(revealTimer - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [revealTimer, revealingHint, messages]);
+
+  const handleRevealHint = (msgId: string) => {
+    setRevealingHint(msgId);
+    setRevealTimer(10);
+    window.open(MONETAG_DIRECT_LINK, '_blank');
+  };
 
   // DP Update state
   const [updatingDP, setUpdatingDP] = useState(false);
@@ -98,6 +133,16 @@ export default function Dashboard() {
   const [showUrlFixer, setShowUrlFixer] = useState(false);
   const [newAppUrl, setNewAppUrl] = useState('');
   const [savingUrl, setSavingUrl] = useState(false);
+
+  const payWithUpi = () => {
+    const upiUrl = "upi://pay?pa=9947683902&pn=ArjunSaji&cu=INR&tn=SupportSling";
+    window.location.href = upiUrl;
+  };
+
+  const requestVerification = () => {
+    const whatsappUrl = `https://wa.me/7306671336?text=${encodeURIComponent("I want to purchase the Sling Blue Tick for my account.")}`;
+    window.open(whatsappUrl, '_blank');
+  };
   const [saveGlobally, setSaveGlobally] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -227,12 +272,12 @@ export default function Dashboard() {
   useEffect(() => {
     const searchUsers = async () => {
       if (searchQuery.length === 0) {
-        // Fetch 20 recent users as suggestions
+        // Fetch 50 users as suggestions (increased from 20)
         setSearching(true);
         try {
           const q = query(
             collection(db, 'usernames'),
-            limit(20)
+            limit(50)
           );
           const snapshot = await getDocs(q);
           const results = snapshot.docs.map((d) => {
@@ -241,7 +286,8 @@ export default function Dashboard() {
               username: d.id,
               photoURL: data.photoURL || null
             };
-          });
+          }).sort(() => Math.random() - 0.5); // Randomize suggestions
+          
           setSearchResults(results.filter(r => r.username.toLowerCase() !== username?.toLowerCase()));
         } catch (err) {
           console.error('Search suggestions failed:', err);
@@ -1090,6 +1136,43 @@ export default function Dashboard() {
                       <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">Your Public Address</p>
                       <p className="text-xs font-mono text-purple-400 break-all">{profileUrl}</p>
                     </div>
+
+                    {/* Support & Status Card */}
+                    <div className="glass p-5 rounded-[2rem] border-white/10 space-y-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400">
+                          <Shield className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-widest text-theme">{t('support_status')}</h4>
+                          <p className="text-[9px] text-gray-500">{t('manage_verification')}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        <button 
+                          onClick={requestVerification}
+                          className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 py-4 rounded-xl flex items-center justify-between px-5 transition-all active:scale-95 group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">{t('get_blue_tick')}</span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-blue-400/50 group-hover:translate-x-1 transition-transform" />
+                        </button>
+                        
+                        <button 
+                          onClick={payWithUpi}
+                          className="w-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 py-4 rounded-xl flex items-center justify-between px-5 transition-all active:scale-95 group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Heart fill="currentColor" className="w-4 h-4 text-amber-400" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">{t('donate_dev')}</span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-amber-400/50 group-hover:translate-x-1 transition-transform" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -1228,7 +1311,7 @@ export default function Dashboard() {
 
                             {/* Actions & Smart Replies (Vertical Layout) */}
                             <div className="flex flex-col gap-2 mb-6 px-1">
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {/* Primary Actions */}
                                 <button 
                                   onClick={() => setSelectedMessage(msg)}
@@ -1243,7 +1326,21 @@ export default function Dashboard() {
                                   className="flex items-center justify-center gap-2 text-[10px] font-bold text-purple-400 hover:text-purple-300 transition-colors bg-purple-500/10 px-3 py-3 rounded-xl border border-purple-500/20"
                                 >
                                   <Search className="w-3 h-3" />
-                                  Guess
+                                  {t('guess')}
+                                </button>
+
+                                <button 
+                                  onClick={() => handleRevealHint(msg.id)}
+                                  disabled={!!revealingHint || !!revealedHints[msg.id]}
+                                  className={cn(
+                                    "flex items-center justify-center gap-2 text-[10px] font-bold transition-colors px-3 py-3 rounded-xl border",
+                                    revealedHints[msg.id] 
+                                     ? "bg-green-500/10 text-green-400 border-green-500/20" 
+                                     : "bg-amber-500/10 text-amber-400 hover:text-amber-300 border-amber-500/20"
+                                  )}
+                                >
+                                  <Zap className="w-3 h-3" />
+                                  {revealedHints[msg.id] ? t('hint_revealed') : t('reveal_hint')}
                                 </button>
 
                                 <button 
@@ -1254,6 +1351,23 @@ export default function Dashboard() {
                                   Reply
                                 </button>
                               </div>
+
+                              {revealedHints[msg.id] && (
+                                <motion.div 
+                                  initial={{ opacity: 0, y: 5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="mt-2 p-3 bg-green-500/5 border border-green-500/10 rounded-xl flex items-center justify-between"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Globe className="w-3 h-3 text-green-400" />
+                                    <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">{revealedHints[msg.id].city}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Zap className="w-3 h-3 text-green-400" />
+                                    <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">{revealedHints[msg.id].device}</span>
+                                  </div>
+                                </motion.div>
+                              )}
 
                               <div className="grid grid-cols-2 gap-2">
                                 <button 
@@ -1574,6 +1688,59 @@ export default function Dashboard() {
         {...confirmConfig}
         onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Reveal Overlay */}
+      {revealingHint && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center"
+        >
+          <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center text-amber-500 mb-6 shadow-[0_0_50px_rgba(245,158,11,0.2)] border border-amber-500/50">
+            <Sparkles className="w-10 h-10 animate-pulse" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2">Revealing Sender Hint...</h3>
+          <p className="text-gray-400 text-sm max-w-xs mb-8">
+            Stay on this screen for 10 seconds to reveal the location and device of this sender!
+          </p>
+          
+          <div className="relative w-16 h-16 flex items-center justify-center mb-8">
+            <svg className="w-full h-full transform -rotate-90">
+              <circle
+                cx="32"
+                cy="32"
+                r="30"
+                stroke="currentColor"
+                strokeWidth="4"
+                fill="transparent"
+                className="text-white/10"
+              />
+              <motion.circle
+                cx="32"
+                cy="32"
+                r="30"
+                stroke="currentColor"
+                strokeWidth="4"
+                fill="transparent"
+                strokeDasharray={188.4}
+                animate={{ strokeDashoffset: 188.4 - (revealTimer / 10) * 188.4 }}
+                className="text-amber-500"
+              />
+            </svg>
+            <span className="absolute text-xl font-mono font-bold text-amber-500">{revealTimer}s</span>
+          </div>
+
+          <button 
+            onClick={() => {
+              setRevealingHint(null);
+              setRevealTimer(0);
+            }}
+            className="text-gray-500 hover:text-white transition-colors text-sm font-bold border border-white/10 px-6 py-2 rounded-full"
+          >
+            Cancel
+          </button>
+        </motion.div>
+      )}
 
       {/* Custom Share Menu Modal */}
       <AnimatePresence>

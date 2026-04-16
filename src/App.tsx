@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React, { useState, useEffect, createContext, useContext, ErrorInfo, ReactNode } from 'react';
 import { onAuthStateChanged, User, sendEmailVerification, signOut, signInAnonymously } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import Login from './pages/Login';
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -13,7 +13,7 @@ const prefetchDashboard = () => import('./pages/Dashboard');
 const prefetchProfile = () => import('./pages/Profile');
 import AdminGuard from './components/AdminGuard';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Mail, LogOut, RefreshCw, CheckCircle, HelpCircle, Sun, Moon, Sparkles } from 'lucide-react';
+import { Mail, LogOut, RefreshCw, CheckCircle, HelpCircle, Sun, Moon, Sparkles, X } from 'lucide-react';
 import { cn } from './lib/utils';
 import HelpModal from './components/HelpModal';
 import { Language, translations } from './lib/translations';
@@ -200,6 +200,67 @@ export default function App() {
     return translations[language][key] || translations['en'][key] || key;
   };
 
+  // Environment detection
+  const isAPK = window.navigator.userAgent.toLowerCase().includes('wv') || (window as any).Android;
+
+  const AdaptiveBanner = () => {
+    const MONETAG_DIRECT_LINK = "https://omg10.com/4/10885845";
+    const [isVisible, setIsVisible] = useState(() => {
+      const closedAt = localStorage.getItem('sling_banner_closed');
+      if (!closedAt) return true;
+      // If closed more than 30 minutes ago, show again
+      return Date.now() - parseInt(closedAt) > 30 * 60 * 1000;
+    });
+
+    if (!isVisible) return null;
+
+    const handleClose = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setIsVisible(false);
+      localStorage.setItem('sling_banner_closed', Date.now().toString());
+    };
+
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-[100] p-4 pointer-events-none mb-4 md:mb-0">
+        <div className="max-w-md mx-auto pointer-events-auto">
+          <motion.div 
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="glass p-4 rounded-3xl shadow-[0_20px_50px_rgba(168,85,247,0.2)] flex items-center justify-between gap-4 overflow-hidden relative border border-white/10 group"
+          >
+            {/* Ad Background Effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-amber-500/10 to-blue-500/10 animate-pulse" />
+            
+            <button 
+              onClick={handleClose}
+              className="absolute top-2 right-2 p-1 text-gray-400 hover:text-white transition-colors z-20"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 relative z-10 font-sans">
+              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg transform group-hover:rotate-12 transition-transform">
+                <Sparkles className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">{t('limited_offer')}</span>
+                <span className="text-xs font-bold text-theme">{t('support_sling_rewards')}</span>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => window.open(MONETAG_DIRECT_LINK, '_blank')}
+              className="relative z-10 gradient-bg text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-tighter hover:scale-105 active:scale-95 transition-all shadow-lg shadow-purple-500/20"
+            >
+              {t('support_us')}
+            </button>
+          </motion.div>
+        </div>
+      </div>
+    );
+  };
+
   // Safe localStorage access
   const safeGetItem = (key: string) => {
     try {
@@ -223,9 +284,7 @@ export default function App() {
 
   const fetchUserProfile = async (currentUser: User) => {
     try {
-      // Use a faster query if possible, but getDoc is already direct.
-      // We can skip fetching if we already have it in state and it's recent,
-      // but Firestore's getDoc is usually fast enough.
+      // Direct getDoc handles internal caching if persistence is enabled.
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       
       if (userDoc.exists()) {
@@ -246,25 +305,42 @@ export default function App() {
         setRole(userRole);
         setCustomAppUrl(appUrl);
         
-        if (name) safeSetItem('sling_username', name);
+        if (name) {
+          safeSetItem('sling_username', name);
+          // Ensure user is in usernames collection for search
+          try {
+            const usernameDoc = await getDoc(doc(db, 'usernames', name.toLowerCase()));
+            if (!usernameDoc.exists()) {
+              await setDoc(doc(db, 'usernames', name.toLowerCase()), {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                photoURL: photo
+              });
+              console.log('Registered missing username for search:', name);
+            }
+          } catch (e) {
+            console.warn('Sync username failed:', e);
+          }
+        }
         safeSetItem('sling_role', userRole);
         if (photo) safeSetItem('sling_photo', photo);
         if (appUrl) safeSetItem('sling_app_url', appUrl);
 
-        // Fetch global config
-        try {
-          const configDoc = await getDoc(doc(db, 'settings', 'config'));
+        // Fetch global config in background
+        getDoc(doc(db, 'settings', 'config')).then(configDoc => {
           if (configDoc.exists()) {
             const globalUrl = configDoc.data().publicUrl;
             setGlobalAppUrl(globalUrl);
             if (globalUrl) safeSetItem('sling_global_url', globalUrl);
           }
-        } catch (e) {
-          console.warn('Could not fetch global config:', e);
-        }
+        }).catch(() => {});
       }
-    } catch (err) {
-      console.error('Error fetching user document:', err);
+    } catch (err: any) {
+      if (err.message?.includes('offline') || err.message?.includes('network')) {
+        console.warn('Profile fetch failed (offline), relying on cache');
+      } else {
+        console.error('Error fetching user document:', err);
+      }
     }
   };
 
@@ -299,19 +375,17 @@ export default function App() {
           safeSetItem('sling_role', 'admin');
         }
         
-        // Only update if user changed or is new
-        setUser(prev => prev?.uid === user.uid ? prev : user);
-        
-        // Prefetch dashboard as soon as we see a user
+        setUser(user);
         prefetchDashboard();
         
-        // Optimistically set loading false if we have cached data
+        // If we have cached profile info, show UI immediately
         const cachedName = safeGetItem('sling_username');
         if (cachedName) {
           setLoading(false);
           loadingRef.current = false;
         }
         
+        // Background fetch fresh data
         fetchUserProfile(user).finally(() => {
           setLoading(false);
           loadingRef.current = false;
@@ -645,6 +719,7 @@ export default function App() {
                   } />
                 </Routes>
               </AnimatePresence>
+              <AdaptiveBanner />
             </React.Suspense>
           </Router>
         </ErrorBoundary>

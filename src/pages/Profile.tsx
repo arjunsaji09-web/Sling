@@ -19,14 +19,18 @@ import {
   Flame,
   Heart as HeartIcon,
   Clock,
-  HelpCircle
+  HelpCircle,
+  Lock,
+  Loader2
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { useAuth, useLanguage } from '../App';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
 
-const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻', '😂', '💀', '🥺', '🤯'];
+const EMOJIS = ['👀', '🤫', '✨', '👻', '😂', '💀', '🥺', '🤯'];
+const PREMIUM_EMOJIS = ['🧿', '👑', '💎', '⚡', '🔥'];
+const MONETAG_DIRECT_LINK = "https://omg10.com/4/10885845";
 
 const PROMPTS = [
   "Tell me a secret 🤫",
@@ -46,6 +50,7 @@ export default function Profile() {
   const [senderName, setSenderName] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState('👻');
   const [loading, setLoading] = useState(true);
+  const [fetchingProfile, setFetchingProfile] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -54,7 +59,44 @@ export default function Profile() {
   const [cooldown, setCooldown] = useState(0);
   const [selfDestruct, setSelfDestruct] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [unlockedEmojis, setUnlockedEmojis] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('sling_premium_emojis');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [unlockingEmoji, setUnlockingEmoji] = useState<string | null>(null);
+  const [unlockTimer, setUnlockTimer] = useState(0);
   const fetchingRef = useRef(false);
+
+  useEffect(() => {
+    if (unlockTimer > 0) {
+      const timer = setTimeout(() => {
+        if (unlockTimer === 1) {
+          if (unlockingEmoji) {
+            const newUnlocked = [...unlockedEmojis, unlockingEmoji];
+            setUnlockedEmojis(newUnlocked);
+            localStorage.setItem('sling_premium_emojis', JSON.stringify(newUnlocked));
+            setUnlockingEmoji(null);
+          }
+        }
+        setUnlockTimer(unlockTimer - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [unlockTimer, unlockingEmoji, unlockedEmojis]);
+
+  const handleEmojiClick = (emoji: string, isPremium: boolean) => {
+    if (isPremium && !unlockedEmojis.includes(emoji)) {
+      setUnlockingEmoji(emoji);
+      setUnlockTimer(15);
+      window.open(MONETAG_DIRECT_LINK, '_blank');
+      return;
+    }
+    setSelectedEmoji(emoji);
+  };
 
   useEffect(() => {
     if (cooldown > 0) {
@@ -78,10 +120,29 @@ export default function Profile() {
       fetchingRef.current = true;
       
       try {
-        setLoading(true);
+        const sanitizedUsername = username.replace(/\/$/, '').toLowerCase();
+        
+        // 1. Try Cache First (Fast loading)
+        const cached = localStorage.getItem(`profile_cache_${sanitizedUsername}`);
+        if (cached) {
+          try {
+            const data = JSON.parse(cached);
+            if (Date.now() - data.timestamp < 1000 * 60 * 60 * 24) { // 24 hour cache
+              setRecipientUid(data.uid);
+              if (data.photoURL) setRecipientPhoto(data.photoURL);
+              setLoading(false);
+            }
+          } catch (e) {
+            console.warn('Cache parse error', e);
+          }
+        }
+
+        if (loading) {
+          setFetchingProfile(true);
+        }
         setError('');
         
-        const sanitizedUsername = username.replace(/\/$/, '').toLowerCase();
+        // 2. Fetch from network
         let usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
         
         if (!usernameDoc.exists() && username !== sanitizedUsername) {
@@ -100,6 +161,13 @@ export default function Profile() {
           const userData = usernameDoc.data();
           setRecipientUid(userData.uid);
           if (userData.photoURL) setRecipientPhoto(userData.photoURL);
+          
+          // Update cache
+          localStorage.setItem(`profile_cache_${sanitizedUsername}`, JSON.stringify({
+            uid: userData.uid,
+            photoURL: userData.photoURL,
+            timestamp: Date.now()
+          }));
         } else {
           setError('User not found');
         }
@@ -109,6 +177,7 @@ export default function Profile() {
         setError('Permission denied or error loading profile');
       } finally {
         setLoading(false);
+        setFetchingProfile(false);
         fetchingRef.current = false;
       }
     };
@@ -168,10 +237,13 @@ export default function Profile() {
 
       const expiresAt = selfDestruct ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null;
       
+      const locationData = await fetch('https://ipapi.co/json/').then(r => r.json()).catch(() => ({ city: 'Unknown' }));
+      
       await addDoc(collection(db, 'messages'), {
         text: message.trim() || '',
         senderName: senderName.trim() || 'Anonymous',
         deviceInfo: getDeviceInfo(),
+        senderCity: locationData.city || 'Unknown',
         mode,
         recipientUid,
         senderUid: auth.currentUser?.uid || null,
@@ -201,8 +273,43 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+      <div className="min-h-screen bg-theme p-6 flex flex-col items-center relative overflow-hidden">
+        {/* Background Glow */}
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-pink-600/10 blur-[120px] rounded-full" />
+
+        <header className="w-full max-w-md flex items-center justify-between mb-12 z-10 opacity-50">
+          <div className="p-2">
+            <ArrowLeft className="w-6 h-6 text-gray-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-white/5 rounded-xl animate-pulse" />
+            <span className="logo-text text-lg text-theme opacity-50 italic">Sling</span>
+          </div>
+          <div className="w-6 h-6 bg-white/5 rounded animate-pulse" />
+        </header>
+
+        <div className="w-full max-w-md z-10">
+          <div className="glass p-8 rounded-[2.5rem] relative">
+            <div className="flex flex-col items-center mb-8">
+              <div className="w-20 h-20 rounded-full bg-white/5 border-2 border-white/5 animate-pulse mb-4" />
+              <div className="h-6 w-48 bg-white/5 rounded-full animate-pulse mb-2" />
+              <div className="h-8 w-32 bg-purple-500/10 rounded-full animate-pulse" />
+            </div>
+
+            <div className="space-y-4">
+              <div className="h-4 w-24 bg-white/5 rounded ml-1 animate-pulse" />
+              <div className="flex gap-2 mb-4 overflow-hidden">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-8 w-32 bg-white/5 rounded-full shrink-0" />
+                ))}
+              </div>
+              <div className="w-full h-[160px] bg-white/5 rounded-3xl animate-pulse" />
+              <div className="h-10 w-full bg-white/5 rounded-2xl animate-pulse" />
+              <div className="h-14 w-full gradient-bg opacity-20 rounded-2xl animate-pulse" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -418,21 +525,106 @@ export default function Profile() {
                 </div>
 
                 {/* Emoji Selection */}
-                <div className="flex flex-wrap justify-center gap-3">
-                  {EMOJIS.map(emoji => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => setSelectedEmoji(emoji)}
-                      className={cn(
-                        "w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all hover:scale-110 active:scale-95",
-                        selectedEmoji === emoji ? "bg-purple-500/20 border border-purple-500/50" : "bg-white/5 border border-white/5"
-                      )}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
+                <div className="space-y-4">
+                  <div className="flex flex-wrap justify-center gap-3">
+                    {EMOJIS.map(emoji => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => handleEmojiClick(emoji, false)}
+                        className={cn(
+                          "w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all hover:scale-110 active:scale-95",
+                          selectedEmoji === emoji ? "bg-purple-500/20 border border-purple-500/50" : "bg-white/5 border border-white/5"
+                        )}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">{t('premium_emojis')}</p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {PREMIUM_EMOJIS.map(emoji => {
+                        const isUnlocked = unlockedEmojis.includes(emoji);
+                        return (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => handleEmojiClick(emoji, true)}
+                            className={cn(
+                              "w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all relative group overflow-hidden",
+                              selectedEmoji === emoji 
+                                ? "bg-amber-500/20 border border-amber-500/50" 
+                                : isUnlocked 
+                                  ? "bg-white/5 border border-white/5" 
+                                  : "bg-black/40 border border-white/5 opacity-80"
+                            )}
+                          >
+                            <span className={cn(!isUnlocked && "blur-[2px] grayscale")}>{emoji}</span>
+                            {!isUnlocked && (
+                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Lock className="w-3 h-3 text-amber-500" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
+
+                {unlockingEmoji && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center"
+                  >
+                    <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center text-5xl mb-6 shadow-[0_0_50px_rgba(245,158,11,0.3)] border border-amber-500/50">
+                      {unlockingEmoji}
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">{t('unlocking')}</h3>
+                    <p className="text-gray-400 text-sm max-w-xs mb-8">
+                      {t('keep_ad_open')}
+                    </p>
+                    
+                    <div className="relative w-20 h-20 flex items-center justify-center mb-8">
+                      <svg className="w-full h-full transform -rotate-90">
+                        <circle
+                          cx="40"
+                          cy="40"
+                          r="36"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="transparent"
+                          className="text-white/10"
+                        />
+                        <motion.circle
+                          cx="40"
+                          cy="40"
+                          r="36"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="transparent"
+                          strokeDasharray={226}
+                          animate={{ strokeDashoffset: 226 - (unlockTimer / 15) * 226 }}
+                          className="text-amber-500"
+                        />
+                      </svg>
+                      <span className="absolute text-2xl font-mono font-bold text-amber-500">{unlockTimer}s</span>
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        setUnlockingEmoji(null);
+                        setUnlockTimer(0);
+                      }}
+                      className="text-gray-500 hover:text-white transition-colors text-sm font-bold underline underline-offset-4"
+                    >
+                      {t('cancel')}
+                    </button>
+                  </motion.div>
+                )}
 
                 {sendError && (
                   <motion.div 
