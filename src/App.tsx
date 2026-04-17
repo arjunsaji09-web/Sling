@@ -18,6 +18,8 @@ import { cn } from './lib/utils';
 import HelpModal from './components/HelpModal';
 import { Language, translations } from './lib/translations';
 
+import { MONETAG_DIRECT_LINK, openMonetagLink } from './lib/monetag';
+
 interface ThemeContextType {
   theme: 'dark' | 'light';
   toggleTheme: () => void;
@@ -204,7 +206,6 @@ export default function App() {
   const isAPK = window.navigator.userAgent.toLowerCase().includes('wv') || (window as any).Android;
 
   const AdaptiveBanner = () => {
-    const MONETAG_DIRECT_LINK = "https://omg10.com/4/10885845";
     const [isVisible, setIsVisible] = useState(() => {
       const closedAt = localStorage.getItem('sling_banner_closed');
       if (!closedAt) return true;
@@ -250,7 +251,7 @@ export default function App() {
             </div>
 
             <button 
-              onClick={() => window.open(MONETAG_DIRECT_LINK, '_blank')}
+              onClick={() => openMonetagLink()}
               className="relative z-10 gradient-bg text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-tighter hover:scale-105 active:scale-95 transition-all shadow-lg shadow-purple-500/20"
             >
               {t('support_us')}

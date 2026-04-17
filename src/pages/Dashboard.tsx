@@ -31,6 +31,7 @@ import {
   HelpCircle,
   Bell,
   BellOff,
+  MapPin,
   Facebook,
   Twitter,
   Instagram,
@@ -48,6 +49,7 @@ import { Link } from 'react-router-dom';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { MONETAG_DIRECT_LINK, openMonetagLink, checkAdBlock } from '../lib/monetag';
 
 interface Message {
   id: string;
@@ -85,6 +87,8 @@ export default function Dashboard() {
   const [blurMessage, setBlurMessage] = useState(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [lastViewedCount, setLastViewedCount] = useState(0);
+  const [showPermissionWizard, setShowPermissionWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,9 +96,44 @@ export default function Dashboard() {
   const [searching, setSearching] = useState(false);
   const [revealingHint, setRevealingHint] = useState<string | null>(null);
   const [revealTimer, setRevealTimer] = useState(0);
-  const [revealedHints, setRevealedHints] = useState<{ [key: string]: { city: string, device: string } }>({});
+  const [adBlockDetected, setAdBlockDetected] = useState(false);
+  const [revealedHints, setRevealedHints] = useState<{ [key: string]: { city: string, device: string } }>(() => {
+    try {
+      const saved = localStorage.getItem('sling_revealed_hints');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
 
-  const MONETAG_DIRECT_LINK = "https://omg10.com/4/10885845";
+  useEffect(() => {
+    // Check if onboarding is needed
+    const onboardingDone = localStorage.getItem('sling_onboarding_done');
+    if (!onboardingDone && user) {
+      setShowPermissionWizard(true);
+    }
+  }, [user]);
+
+  const requestGeolocation = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setWizardStep(prev => prev + 1);
+        },
+        () => {
+          // Even if denied, move forward
+          setWizardStep(prev => prev + 1);
+        }
+      );
+    } else {
+      setWizardStep(prev => prev + 1);
+    }
+  };
+
+  const completeOnboarding = () => {
+    localStorage.setItem('sling_onboarding_done', 'true');
+    setShowPermissionWizard(false);
+  };
 
   useEffect(() => {
     if (revealTimer > 0) {
@@ -102,26 +141,34 @@ export default function Dashboard() {
         if (revealTimer === 1 && revealingHint) {
           const msg = messages.find(m => m.id === revealingHint);
           if (msg) {
-            setRevealedHints(prev => ({
-              ...prev,
+            const newHints = {
+              ...revealedHints,
               [msg.id]: {
                 city: (msg as any).senderCity || 'Unknown City',
                 device: msg.deviceInfo || 'Unknown Device'
               }
-            }));
+            };
+            setRevealedHints(newHints);
+            localStorage.setItem('sling_revealed_hints', JSON.stringify(newHints));
           }
           setRevealingHint(null);
         }
-        setRevealTimer(revealTimer - 1);
+        setRevealTimer(prev => prev - 1);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [revealTimer, revealingHint, messages]);
+  }, [revealTimer, revealingHint, messages, revealedHints]);
 
-  const handleRevealHint = (msgId: string) => {
+  const handleRevealHint = async (msgId: string) => {
+    setAdBlockDetected(false);
+    const isBlocked = await checkAdBlock();
+    if (isBlocked) {
+      setAdBlockDetected(true);
+      return;
+    }
     setRevealingHint(msgId);
     setRevealTimer(10);
-    window.open(MONETAG_DIRECT_LINK, '_blank');
+    openMonetagLink();
   };
 
   // DP Update state
@@ -219,9 +266,10 @@ export default function Dashboard() {
 
   const playNotificationSound = () => {
     try {
+      // Professional SMS/Message notification sound
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-      audio.volume = 0.5;
-      audio.play();
+      audio.volume = 0.8;
+      audio.play().catch(e => console.warn('Audio auto-play blocked', e));
     } catch (e) {
       console.error('Audio play failed:', e);
     }
@@ -229,12 +277,21 @@ export default function Dashboard() {
 
   const showWebNotification = (title: string, body: string) => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification(title, {
+      const options: any = {
         body,
-        icon: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sling',
+        icon: photoURL || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sling',
         badge: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sling',
-        tag: 'new-message'
-      });
+        tag: 'new-message',
+        renotify: true,
+        silent: false,
+        vibrate: [200, 100, 200]
+      };
+      
+      const n = new Notification(title, options);
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
     }
   };
 
@@ -1293,6 +1350,31 @@ export default function Dashboard() {
                               {msg.text}
                             </p>
 
+                            {/* Revealed Hint */}
+                            {revealedHints[msg.id] && (
+                              <motion.div 
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2 relative overflow-hidden group"
+                              >
+                                <div className="absolute top-0 right-0 p-2 opacity-20">
+                                  <Sparkles className="w-8 h-8 text-amber-500" />
+                                </div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-500/60 mb-1">Sender Location & Device</p>
+                                <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-1.5">
+                                    <MapPin className="w-3.5 h-3.5 text-amber-500" />
+                                    <span className="text-sm font-bold text-theme">{revealedHints[msg.id].city}</span>
+                                  </div>
+                                  <div className="w-1 h-1 bg-white/10 rounded-full" />
+                                  <div className="flex items-center gap-1.5">
+                                    <Globe className="w-3.5 h-3.5 text-amber-500" />
+                                    <span className="text-sm font-bold text-theme">{revealedHints[msg.id].device}</span>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+
                             {/* Reactions */}
                             <div className="flex flex-wrap gap-2 mb-4">
                               {['❤️', '😂', '😳', '🔥'].map(emoji => (
@@ -1983,6 +2065,130 @@ export default function Dashboard() {
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Onboarding Permission Wizard */}
+      <AnimatePresence>
+        {showPermissionWizard && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-sm glass p-8 rounded-[2.5rem] relative"
+            >
+              <div className="absolute top-0 right-0 p-4">
+                <div className="text-[10px] font-black text-white/20 uppercase tracking-widest">
+                  Step {wizardStep} / 3
+                </div>
+              </div>
+
+              {wizardStep === 1 && (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 mb-6">
+                    <Bell className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Enable Notifications</h3>
+                  <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                    Get instant SMS-style alerts when someone sends you a message. You won't miss a single Sling!
+                  </p>
+                  <button 
+                    onClick={async () => {
+                      await requestNotificationPermission();
+                      setWizardStep(2);
+                    }}
+                    className="w-full gradient-bg text-white py-4 rounded-xl font-bold shadow-lg shadow-purple-500/20 active:scale-95 transition-all"
+                  >
+                    Allow Notifications
+                  </button>
+                  <button 
+                    onClick={() => setWizardStep(2)}
+                    className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest hover:text-white transition-colors"
+                  >
+                    Later
+                  </button>
+                </div>
+              )}
+
+              {wizardStep === 2 && (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center text-amber-400 mb-6">
+                    <MapPin className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Location Access</h3>
+                  <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                    We use your location to provide "Hints" to others. It makes the game much more exciting!
+                  </p>
+                  <button 
+                    onClick={requestGeolocation}
+                    className="w-full gradient-bg text-white py-4 rounded-xl font-bold shadow-lg shadow-purple-500/20 active:scale-95 transition-all"
+                  >
+                    Enable Location
+                  </button>
+                  <button 
+                    onClick={() => setWizardStep(3)}
+                    className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest hover:text-white transition-colors"
+                  >
+                    Later
+                  </button>
+                </div>
+              )}
+
+              {wizardStep === 3 && (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 bg-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400 mb-6">
+                    <ImageIcon className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Storage & Photos</h3>
+                  <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                    To upload profile pictures and share stories, we need access to your photos.
+                  </p>
+                  <button 
+                    onClick={completeOnboarding}
+                    className="w-full gradient-bg text-white py-4 rounded-xl font-bold shadow-lg shadow-purple-500/20 active:scale-95 transition-all"
+                  >
+                    Allow Photo Access
+                  </button>
+                  <button 
+                    onClick={completeOnboarding}
+                    className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest hover:text-white transition-colors"
+                  >
+                    Finish Setup
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {adBlockDetected && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center"
+          >
+            <div className="w-20 h-20 bg-red-500/20 rounded-3xl flex items-center justify-center text-red-400 mb-6 shadow-lg shadow-red-500/10">
+              <AlertCircle className="w-10 h-10" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">{t('adblock_detected')}</h3>
+            <p className="text-gray-400 text-sm max-w-xs mb-10 leading-relaxed">
+              {t('disable_adblock_msg')}
+            </p>
+            
+            <button 
+              onClick={() => setAdBlockDetected(false)}
+              className="gradient-bg text-white px-12 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95 transition-all shadow-xl shadow-purple-500/20"
+            >
+              {t('got_it')}
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

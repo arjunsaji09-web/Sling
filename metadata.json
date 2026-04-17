@@ -1,5 +1,5 @@
 {
   "name": "Sling",
   "description": "Premium anonymous messaging platform with viral features like AI replies and Story sharing.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["geolocation"]
 }

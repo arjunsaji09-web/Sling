@@ -27,10 +27,10 @@ import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { useAuth, useLanguage } from '../App';
 import HelpModal from '../components/HelpModal';
 import ThemeToggle from '../components/ThemeToggle';
+import { MONETAG_DIRECT_LINK, openMonetagLink, checkAdBlock } from '../lib/monetag';
 
 const EMOJIS = ['👀', '🤫', '✨', '👻', '😂', '💀', '🥺', '🤯'];
 const PREMIUM_EMOJIS = ['🧿', '👑', '💎', '⚡', '🔥'];
-const MONETAG_DIRECT_LINK = "https://omg10.com/4/10885845";
 
 const PROMPTS = [
   "Tell me a secret 🤫",
@@ -69,6 +69,7 @@ export default function Profile() {
   });
   const [unlockingEmoji, setUnlockingEmoji] = useState<string | null>(null);
   const [unlockTimer, setUnlockTimer] = useState(0);
+  const [adBlockDetected, setAdBlockDetected] = useState(false);
   const fetchingRef = useRef(false);
 
   useEffect(() => {
@@ -88,11 +89,17 @@ export default function Profile() {
     }
   }, [unlockTimer, unlockingEmoji, unlockedEmojis]);
 
-  const handleEmojiClick = (emoji: string, isPremium: boolean) => {
+  const handleEmojiClick = async (emoji: string, isPremium: boolean) => {
     if (isPremium && !unlockedEmojis.includes(emoji)) {
+      setAdBlockDetected(false); // Reset
+      const isBlocked = await checkAdBlock();
+      if (isBlocked) {
+        setAdBlockDetected(true);
+        return;
+      }
       setUnlockingEmoji(emoji);
       setUnlockTimer(15);
-      window.open(MONETAG_DIRECT_LINK, '_blank');
+      openMonetagLink();
       return;
     }
     setSelectedEmoji(emoji);
@@ -622,6 +629,30 @@ export default function Profile() {
                       className="text-gray-500 hover:text-white transition-colors text-sm font-bold underline underline-offset-4"
                     >
                       {t('cancel')}
+                    </button>
+                  </motion.div>
+                )}
+
+                {/* AdBlock Warning Overlay */}
+                {adBlockDetected && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center"
+                  >
+                    <div className="w-20 h-20 bg-red-500/20 rounded-3xl flex items-center justify-center text-red-400 mb-6 shadow-lg shadow-red-500/10">
+                      <AlertCircle className="w-10 h-10" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">{t('adblock_detected')}</h3>
+                    <p className="text-gray-400 text-sm max-w-xs mb-10 leading-relaxed">
+                      {t('disable_adblock_msg')}
+                    </p>
+                    
+                    <button 
+                      onClick={() => setAdBlockDetected(false)}
+                      className="gradient-bg text-white px-12 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95 transition-all shadow-xl shadow-purple-500/20"
+                    >
+                      {t('got_it')}
                     </button>
                   </motion.div>
                 )}

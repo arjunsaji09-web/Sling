@@ -70,7 +70,10 @@ export const translations = {
     guess: 'Guess',
     retry_connection: 'Retry Connection',
     switch_to_login: 'Switch to Login tab →',
-    issue_encountered: 'Issue Encountered'
+    issue_encountered: 'Issue Encountered',
+    adblock_detected: 'AdBlock Detected',
+    disable_adblock_msg: 'Please disable your adblocker or whitelist this site to unlock premium features and reveal hints!',
+    got_it: 'Got it'
   },
   es: {
     app_name: 'Sling',
