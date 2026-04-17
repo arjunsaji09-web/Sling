@@ -244,13 +244,45 @@ export default function Profile() {
 
       const expiresAt = selfDestruct ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null;
       
-      const locationData = await fetch('https://ipapi.co/json/').then(r => r.json()).catch(() => ({ city: 'Unknown' }));
+      // Robust location fetching with multiple fallbacks
+      const getLocationData = async () => {
+        const services = [
+          { url: 'https://ipapi.co/json/', field: 'city', countryField: 'country_name' },
+          { url: 'https://freeipapi.com/api/json', field: 'cityName', countryField: 'countryName' },
+          { url: 'https://ip-api.com/json/', field: 'city', countryField: 'country' }
+        ];
+
+        for (const service of services) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const res = await fetch(service.url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (res.ok) {
+              const data = await res.json();
+              if (data[service.field]) {
+                return { 
+                  city: data[service.field], 
+                  country: data[service.countryField] || 'Unknown' 
+                };
+              }
+            }
+          } catch (e) {
+            console.warn(`Location service ${service.url} failed:`, e);
+          }
+        }
+        return { city: 'Unknown City', country: 'Unknown' };
+      };
+
+      const { city, country } = await getLocationData();
       
       await addDoc(collection(db, 'messages'), {
         text: message.trim() || '',
         senderName: senderName.trim() || 'Anonymous',
         deviceInfo: getDeviceInfo(),
-        senderCity: locationData.city || 'Unknown',
+        senderCity: city,
+        senderCountry: country,
         mode,
         recipientUid,
         senderUid: auth.currentUser?.uid || null,

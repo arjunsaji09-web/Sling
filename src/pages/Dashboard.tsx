@@ -59,6 +59,8 @@ interface Message {
   emoji?: string;
   senderName?: string;
   deviceInfo?: string;
+  senderCity?: string;
+  senderCountry?: string;
   mode?: 'normal' | 'roast' | 'flirt';
   reactions?: { [key: string]: number };
   expiresAt?: any;
@@ -97,7 +99,7 @@ export default function Dashboard() {
   const [revealingHint, setRevealingHint] = useState<string | null>(null);
   const [revealTimer, setRevealTimer] = useState(0);
   const [adBlockDetected, setAdBlockDetected] = useState(false);
-  const [revealedHints, setRevealedHints] = useState<{ [key: string]: { city: string, device: string } }>(() => {
+  const [revealedHints, setRevealedHints] = useState<{ [key: string]: { city: string, country?: string, device: string } }>(() => {
     try {
       const saved = localStorage.getItem('sling_revealed_hints');
       return saved ? JSON.parse(saved) : {};
@@ -144,7 +146,8 @@ export default function Dashboard() {
             const newHints = {
               ...revealedHints,
               [msg.id]: {
-                city: (msg as any).senderCity || 'Unknown City',
+                city: msg.senderCity || 'Unknown City',
+                country: msg.senderCountry || 'Unknown Country',
                 device: msg.deviceInfo || 'Unknown Device'
               }
             };
@@ -1361,13 +1364,16 @@ export default function Dashboard() {
                                   <Sparkles className="w-8 h-8 text-amber-500" />
                                 </div>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-amber-500/60 mb-1">Sender Location & Device</p>
-                                <div className="flex items-center gap-4">
-                                  <div className="flex items-center gap-1.5">
-                                    <MapPin className="w-3.5 h-3.5 text-amber-500" />
-                                    <span className="text-sm font-bold text-theme">{revealedHints[msg.id].city}</span>
+                                  <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                    <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                    <span className="text-sm font-bold text-theme truncate">
+                                      {revealedHints[msg.id].city}
+                                      {revealedHints[msg.id].country && revealedHints[msg.id].country !== 'Unknown' && `, ${revealedHints[msg.id].country}`}
+                                    </span>
                                   </div>
-                                  <div className="w-1 h-1 bg-white/10 rounded-full" />
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="w-1 h-1 bg-white/10 rounded-full shrink-0" />
+                                  <div className="flex items-center gap-1.5 shrink-0">
                                     <Globe className="w-3.5 h-3.5 text-amber-500" />
                                     <span className="text-sm font-bold text-theme">{revealedHints[msg.id].device}</span>
                                   </div>
