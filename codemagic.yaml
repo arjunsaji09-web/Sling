@@ -2,21 +2,27 @@ workflows:
   android-workflow:
     name: Android Build
     max_build_duration: 60
-    instance_type: mac_mini_m1
+    instance_type: linux
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: '*'
+          include: true
+          source: true
     environment:
       node: 20
       java: 17
     scripts:
       - name: Build and Sync
         script: |
-          npm install
+          npm install --no-audit --no-fund
           npm run build
           npx cap sync android
       - name: Assemble APK
         script: |
           cd android
-          # Print SHA-1 for Firebase configuration
-          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep SHA1
-          gradle clean assembleDebug
+          chmod +x gradlew
+          ./gradlew clean assembleDebug
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
