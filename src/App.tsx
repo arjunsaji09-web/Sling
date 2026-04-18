@@ -50,6 +50,7 @@ interface AuthContextType {
   user: User | null;
   username: string | null;
   photoURL: string | null;
+  isVerified: boolean;
   role: 'user' | 'admin' | null;
   customAppUrl: string | null;
   globalAppUrl: string | null;
@@ -65,6 +66,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null, 
   username: null, 
   photoURL: null, 
+  isVerified: false,
   role: null,
   customAppUrl: null,
   globalAppUrl: null,
@@ -177,6 +179,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [photoURL, setPhotoURL] = useState<string | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
   const [role, setRole] = useState<'user' | 'admin' | null>(null);
   const [customAppUrl, setCustomAppUrl] = useState<string | null>(null);
   const [globalAppUrl, setGlobalAppUrl] = useState<string | null>(null);
@@ -245,8 +248,8 @@ export default function App() {
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">{t('limited_offer')}</span>
-                <span className="text-xs font-bold text-theme">{t('support_sling_rewards')}</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Premium Content</span>
+                <span className="text-xs font-bold text-theme">Unlock extra features & hints</span>
               </div>
             </div>
 
@@ -254,7 +257,7 @@ export default function App() {
               onClick={() => openMonetagLink()}
               className="relative z-10 gradient-bg text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-tighter hover:scale-105 active:scale-95 transition-all shadow-lg shadow-purple-500/20"
             >
-              {t('support_us')}
+              Get Premium
             </button>
           </motion.div>
         </div>
@@ -292,6 +295,7 @@ export default function App() {
         const data = userDoc.data();
         const name = data.username || null;
         const photo = data.photoURL || null;
+        const verified = data.isVerified || false;
         let userRole = data.role || 'user';
         
         // Force admin role for specific emails
@@ -303,6 +307,7 @@ export default function App() {
         
         setUsername(name);
         setPhotoURL(photo);
+        setIsVerified(verified);
         setRole(userRole);
         setCustomAppUrl(appUrl);
         
@@ -654,6 +659,7 @@ export default function App() {
           user, 
           username, 
           photoURL, 
+          isVerified,
           role, 
           customAppUrl,
           globalAppUrl,

@@ -9,21 +9,36 @@
         "username": { "type": "string" },
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["user", "admin"] },
+        "isVerified": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "username", "role"]
     },
     "Message": {
       "title": "Message",
-      "description": "An anonymous message sent to a user.",
+      "description": "A message sent in a conversation.",
       "type": "object",
       "properties": {
         "text": { "type": "string" },
         "recipientUid": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
         "createdAt": { "type": "string", "format": "date-time" },
         "emoji": { "type": "string" }
       },
-      "required": ["text", "recipientUid", "createdAt"]
+      "required": ["text", "recipientUid", "conversationId", "createdAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "A thread between two users.",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "unreadCount": { "type": "object" }
+      }
     }
   },
   "firestore": {
@@ -33,7 +48,11 @@
     },
     "/messages/{messageId}": {
       "schema": "Message",
-      "description": "Anonymous messages."
+      "description": "All messages."
+    },
+    "/conversations/{convId}": {
+      "schema": "Conversation",
+      "description": "Conversation threads."
     },
     "/usernames/{username}": {
       "schema": { "type": "object", "properties": { "uid": { "type": "string" } } },

@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, enableIndexedDbPersistence, terminate } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getMessaging, onMessage, getToken } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -30,3 +31,5 @@ if (typeof window !== 'undefined') {
 }
 
 export const storage = getStorage(app);
+export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
+export { onMessage, getToken };

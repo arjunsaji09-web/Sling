@@ -2,6 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -18,7 +23,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      // Basic profile info is public to authenticated users
+      allow read: if isAuthenticated();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) || isAdmin();
     }
@@ -29,12 +35,26 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    match /conversations/{convId} {
+      // User must be a participant to see the conversation
+      allow read: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
+      allow update: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin());
+    }
+
     match /messages/{messageId} {
-      allow read, delete: if isAuthenticated() && (resource.data.recipientUid == request.auth.uid || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.recipientUid == request.auth.uid || isAdmin());
+      // Allow read based on participants array for efficient list queries
+      // We use hasAny to ensure it works for list queries
+      allow read: if isAuthenticated() && (resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
+      
+      allow delete: if isAuthenticated() && (resource.data.recipientUid == request.auth.uid || resource.data.senderUid == request.auth.uid || isAdmin());
+      
       allow create: if isAuthenticated() 
+                    && (request.auth.uid in request.resource.data.participants)
                     && request.resource.data.text is string 
-                    && request.resource.data.text.size() <= 500;
+                    && request.resource.data.text.size() <= 1000;
+      
+      allow update: if isAdmin();
     }
 
     match /reports/{reportId} {

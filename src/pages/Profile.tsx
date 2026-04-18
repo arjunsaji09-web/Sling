@@ -1,15 +1,16 @@
 import { useState, useEffect, FormEvent, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, limit, Timestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, limit, Timestamp, doc, getDoc, setDoc, increment, onSnapshot, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
-import { db, storage, auth } from '../lib/firebase';
+import { db, storage, auth, messaging, getToken } from '../lib/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MessageCircle, 
   Send, 
   ShieldCheck, 
   ArrowLeft, 
+  ArrowRight,
   CheckCircle2, 
   AlertCircle,
   Sparkles,
@@ -21,7 +22,10 @@ import {
   Clock,
   HelpCircle,
   Lock,
-  Loader2
+  Loader2,
+  Ghost,
+  Bell,
+  Bookmark
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { useAuth, useLanguage } from '../App';
@@ -59,6 +63,7 @@ export default function Profile() {
   const [cooldown, setCooldown] = useState(0);
   const [selfDestruct, setSelfDestruct] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [toast, setToast] = useState<{ msg: string, type: 'success' | 'info' | 'error' } | null>(null);
   const [unlockedEmojis, setUnlockedEmojis] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('sling_premium_emojis');
@@ -70,7 +75,89 @@ export default function Profile() {
   const [unlockingEmoji, setUnlockingEmoji] = useState<string | null>(null);
   const [unlockTimer, setUnlockTimer] = useState(0);
   const [adBlockDetected, setAdBlockDetected] = useState(false);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+  const [guestId] = useState<string>(() => {
+    let gid = localStorage.getItem('sling_guest_id');
+    if (!gid) {
+      gid = `guest_${Math.floor(Math.random() * 9000) + 1000}`;
+      localStorage.setItem('sling_guest_id', gid);
+    }
+    return gid;
+  });
   const fetchingRef = useRef(false);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      if (!auth.currentUser) {
+        try {
+          await signInAnonymously(auth);
+        } catch (e) {
+          console.warn('Anonymous auth failed on mount:', e);
+        }
+      }
+    };
+    initAuth();
+  }, []);
+
+  const activeConversationId = (auth.currentUser?.uid && recipientUid) 
+    ? [auth.currentUser.uid, recipientUid].sort().join('_') 
+    : null;
+
+  // Listen for chat history
+  useEffect(() => {
+    if (!activeConversationId) return;
+    
+    const q = query(
+      collection(db, 'messages'),
+      where('conversationId', '==', activeConversationId),
+      where('participants', 'array-contains', auth.currentUser.uid),
+      orderBy('createdAt', 'asc'),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setChatMessages(msgs);
+    }, (err) => {
+      console.error('Chat history subscription error:', err);
+    });
+
+    return () => unsubscribe();
+  }, [activeConversationId]);
+
+  const showToast = (msg: string, type: 'success' | 'info' | 'error' = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!messaging || !activeConversationId || !auth.currentUser) return;
+    
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const token = await getToken(messaging, { 
+          vapidKey: 'BDX-YqZfJ_Yy-Z8E1Pz_H9XqL_8Qe-K-7zX-XzX-XzX' // Placeholder, user will need to configure
+        });
+        
+        if (token) {
+          await setDoc(doc(db, 'conversations', activeConversationId), {
+            [`notificationTokens.${auth.currentUser.uid}`]: token
+          }, { merge: true });
+          showToast('Notifications enabled! 🔔', 'success');
+        }
+      }
+    } catch (err) {
+      console.error('Notification permission error:', err);
+      showToast('Push notifications not configured fully.', 'info');
+    } finally {
+      setShowNotificationPrompt(false);
+    }
+  };
 
   useEffect(() => {
     if (unlockTimer > 0) {
@@ -150,21 +237,24 @@ export default function Profile() {
         setError('');
         
         // 2. Fetch from network
-        let usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
+        // Try all potential checks in parallel for speed
+        const [primaryDoc, fallbackDoc] = await Promise.all([
+          getDoc(doc(db, 'usernames', sanitizedUsername)),
+          username !== sanitizedUsername ? getDoc(doc(db, 'usernames', username)) : Promise.resolve(null)
+        ]);
         
-        if (!usernameDoc.exists() && username !== sanitizedUsername) {
-          usernameDoc = await getDoc(doc(db, 'usernames', username));
-        }
-
-        if (!usernameDoc.exists() && username.includes('@')) {
-          const q = query(collection(db, 'usernames'), where('email', '==', username.toLowerCase()));
+        let usernameDoc = primaryDoc.exists() ? primaryDoc : (fallbackDoc?.exists() ? fallbackDoc : null);
+        
+        // If still not found and looks like email
+        if (!usernameDoc && username.includes('@')) {
+          const q = query(collection(db, 'usernames'), where('email', '==', username.toLowerCase()), limit(1));
           const querySnapshot = await getDocs(q);
           if (!querySnapshot.empty) {
             usernameDoc = querySnapshot.docs[0];
           }
         }
         
-        if (usernameDoc.exists()) {
+        if (usernameDoc) {
           const userData = usernameDoc.data();
           setRecipientUid(userData.uid);
           if (userData.photoURL) setRecipientPhoto(userData.photoURL);
@@ -210,17 +300,13 @@ export default function Profile() {
           await signInAnonymously(auth);
         } catch (authErr: any) {
           console.error('Anonymous auth failed:', authErr);
-          if (authErr.code === 'auth/admin-restricted-operation') {
-            setSendError('Anonymous messaging is currently disabled. Please contact the administrator to enable "Anonymous" sign-in in Firebase Console.');
-          } else {
-            setSendError('Authentication failed. Please try again.');
-          }
+          setSendError('Authentication failed. Please try again.');
           setSending(false);
           return;
         }
       }
 
-      // Check if blocked
+      // Check if blocked...
       if (auth.currentUser && recipientUid) {
         const blockId = `${recipientUid}_${auth.currentUser.uid}`;
         const blockDoc = await getDoc(doc(db, 'blocks', blockId));
@@ -231,20 +317,8 @@ export default function Profile() {
         }
       }
 
-      // Daily limit check (100 messages)
-      const today = new Date().toISOString().split('T')[0];
-      const limitKey = `sling_limit_${today}`;
-      const sentToday = parseInt(localStorage.getItem(limitKey) || '0');
-      
-      if (sentToday >= 100) {
-        setSendError(t('rate_limit'));
-        setSending(false);
-        return;
-      }
-
       const expiresAt = selfDestruct ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null;
       
-      // Robust location fetching with multiple fallbacks
       const getLocationData = async () => {
         const services = [
           { url: 'https://ipapi.co/json/', field: 'city', countryField: 'country_name' },
@@ -262,49 +336,53 @@ export default function Profile() {
             if (res.ok) {
               const data = await res.json();
               if (data[service.field]) {
-                return { 
-                  city: data[service.field], 
-                  country: data[service.countryField] || 'Unknown' 
-                };
+                return { city: data[service.field], country: data[service.countryField] || 'Unknown' };
               }
             }
-          } catch (e) {
-            console.warn(`Location service ${service.url} failed:`, e);
-          }
+          } catch (e) { console.warn(`Location service failed:`, e); }
         }
         return { city: 'Unknown City', country: 'Unknown' };
       };
 
       const { city, country } = await getLocationData();
+      const conversationId = [auth.currentUser.uid, recipientUid].sort().join('_');
       
+      await setDoc(doc(db, 'conversations', conversationId), {
+        participants: [auth.currentUser.uid, recipientUid],
+        lastMessage: message.trim(),
+        lastMessageAt: serverTimestamp(),
+        [`unreadCount.${recipientUid}`]: increment(1),
+        guestStatus: {
+          [auth.currentUser.uid]: !currentUser
+        }
+      }, { merge: true });
+
       await addDoc(collection(db, 'messages'), {
         text: message.trim() || '',
-        senderName: senderName.trim() || 'Anonymous',
+        senderName: senderName.trim() || guestId,
         deviceInfo: getDeviceInfo(),
         senderCity: city,
         senderCountry: country,
         mode,
         recipientUid,
         senderUid: auth.currentUser?.uid || null,
-        voiceData: null,
-        mediaData: null,
-        mediaType: null,
+        conversationId,
+        participants: [auth.currentUser?.uid, recipientUid],
         createdAt: serverTimestamp(),
         expiresAt: expiresAt ? Timestamp.fromDate(expiresAt) : null,
         emoji: selectedEmoji
       });
 
-      // Update daily limit
-      localStorage.setItem(limitKey, (sentToday + 1).toString());
+      if (!currentUser && !localStorage.getItem('sling_notifications_requested')) {
+        setShowNotificationPrompt(true);
+      }
 
       setSent(true);
       setMessage('');
-      setSenderName('');
-      setCooldown(10); // 10s cooldown
+      setCooldown(10);
     } catch (err: any) {
       console.error('Send Error:', err);
-      handleFirestoreError(err, OperationType.CREATE, 'messages');
-      setSendError('Failed to send message. Please check your connection and try again.');
+      setSendError('Failed to send. Please try again.');
     } finally {
       setSending(false);
     }
@@ -411,10 +489,107 @@ export default function Profile() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md z-10"
       >
+        {/* Guest Banner */}
+        {!currentUser && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 bg-purple-500/10 border border-purple-500/20 p-3 rounded-2xl flex items-center justify-between gap-3 text-purple-400"
+          >
+            <div className="flex items-center gap-2">
+              <Ghost className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-widest leading-none">Chatting Anonymously as <span className="text-white">{guestId}</span></span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] font-bold">
+              <Bookmark className="w-3 h-3" />
+              <span>{t('bookmark_this')}</span>
+            </div>
+          </motion.div>
+        )}
+
         <AnimatePresence mode="wait">
-          {!sent ? (
+          {!currentUser ? (
             <motion.div 
-              key="form"
+              key="unlock-lock"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="glass p-8 rounded-[2.5rem] relative overflow-hidden border-2 border-purple-500/30 shadow-[0_20px_50px_rgba(168,85,247,0.2)]"
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-purple-600/10 to-transparent" />
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mb-6 shadow-xl transform -rotate-6">
+                  <Lock className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white mb-3 tracking-tight">Reply-to-Register Lock 🔓</h2>
+                <p className="text-gray-400 text-xs mb-8 leading-relaxed max-w-[240px]">
+                  Verification required to reply. Create a free Sling account to continue this conversation and see replies.
+                </p>
+                
+                <Link 
+                  to="/signup"
+                  className="w-full gradient-bg py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  Unlock Chat Now
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                
+                <p className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest opacity-50">
+                  Join in 30 seconds
+                </p>
+              </div>
+            </motion.div>
+          ) : !sent ? (
+            <div className="space-y-4">
+              {/* Previous Messages (Ghost Chat) */}
+              {chatMessages.length > 0 && (
+                <div className="relative group">
+                  <div className={cn(
+                    "glass p-4 rounded-[2rem] max-h-[300px] overflow-y-auto no-scrollbar space-y-3 mb-4 transition-all duration-700",
+                    !currentUser && "blur-[8px] select-none pointer-events-none opacity-60"
+                  )}>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <MessageCircle className="w-3 h-3 text-purple-400" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">History</span>
+                    </div>
+                    {chatMessages.map((msg, i) => (
+                      <motion.div 
+                        key={msg.id}
+                        initial={{ opacity: 0, x: msg.senderUid === auth.currentUser?.uid ? 10 : -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={cn(
+                          "flex flex-col max-w-[85%]",
+                          msg.senderUid === auth.currentUser?.uid ? "ml-auto items-end" : "mr-auto items-start"
+                        )}
+                      >
+                        <div className={cn(
+                          "p-3 rounded-2xl text-xs font-medium break-words",
+                          msg.senderUid === auth.currentUser?.uid 
+                            ? "bg-purple-600 text-white rounded-tr-none" 
+                            : "bg-white/5 border border-white/10 text-theme rounded-tl-none"
+                        )}>
+                          {msg.text}
+                        </div>
+                        <span className="text-[9px] text-gray-500 mt-1 px-1">
+                          {msg.createdAt?.toDate 
+                            ? new Date(msg.createdAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                            : 'Just now'}
+                        </span>
+                      </motion.div>
+                    ))}
+                  </div>
+                  {!currentUser && (
+                    <div className="absolute inset-0 flex items-center justify-center z-20">
+                      <div className="bg-purple-500/10 px-4 py-2 rounded-full border border-purple-500/30 backdrop-blur-sm flex items-center gap-2">
+                        <Lock className="w-3 h-3 text-purple-400" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Sneak Peek Only</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <motion.div 
+                key="form"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -728,7 +903,8 @@ export default function Profile() {
                 <ShieldCheck className="w-4 h-4" />
                 <span>Encrypted & Anonymous</span>
               </div>
-            </motion.div>
+              </motion.div>
+            </div>
           ) : (
             <motion.div 
               key="success"
@@ -782,6 +958,69 @@ export default function Profile() {
       </motion.div>
 
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+
+      {/* Notification Prompt */}
+      <AnimatePresence>
+        {showNotificationPrompt && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 left-6 right-6 z-[110] max-w-md mx-auto"
+          >
+            <div className="glass p-6 rounded-3xl shadow-2xl border-white/20">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 bg-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400">
+                  <Bell className="w-6 h-6 animate-swing" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-theme">Stay Updated</h3>
+                  <p className="text-[10px] text-gray-500">Enable reply notifications for this chat.</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    localStorage.setItem('sling_notifications_requested', 'true');
+                    setShowNotificationPrompt(false);
+                  }}
+                  className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-gray-400"
+                >
+                  Maybe Later
+                </button>
+                <button 
+                  onClick={requestNotificationPermission}
+                  className="flex-1 gradient-bg py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white shadow-lg shadow-purple-500/20"
+                >
+                  Enable Now
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[200]"
+          >
+            <div className={cn(
+              "px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 backdrop-blur-xl border font-bold text-xs uppercase tracking-widest",
+              toast.type === 'success' ? "bg-green-500/20 border-green-500/30 text-green-400" :
+              toast.type === 'error' ? "bg-red-500/20 border-red-500/30 text-red-400" :
+              "bg-purple-500/20 border-purple-500/30 text-purple-400"
+            )}>
+              {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <Info className="w-4 h-4" />}
+              {toast.msg}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

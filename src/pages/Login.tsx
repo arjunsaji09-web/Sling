@@ -9,7 +9,7 @@ import {
   browserLocalPersistence,
   getRedirectResult
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, limit } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp, limit, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../lib/firebase';
 import { useAuth, useLanguage } from '../App';
@@ -203,10 +203,74 @@ export default function Login({ isLoginMode = true }: LoginProps) {
     }
   };
 
+  const migrateGuestData = async (oldUid: string, newUid: string) => {
+    try {
+      const guestId = localStorage.getItem('sling_guest_id');
+      if (!guestId) return;
+
+      console.log(`Migrating guest data from ${oldUid} to ${newUid} (guestId: ${guestId})`);
+
+      // 1. Migrate Conversations
+      const conversationsRef = collection(db, 'conversations');
+      const qConversations = query(conversationsRef, where('participants', 'array-contains', oldUid));
+      const conversationsSnap = await getDocs(qConversations);
+
+      const batch = writeBatch(db);
+      
+      conversationsSnap.forEach((convDoc) => {
+        const data = convDoc.data();
+        const participants = data.participants || [];
+        const guestStatus = data.guestStatus || {};
+
+        // Update participants array
+        const newParticipants = participants.map((p: string) => p === oldUid ? newUid : p);
+        
+        // Update guestStatus map
+        const newGuestStatus = { ...guestStatus };
+        if (newGuestStatus[oldUid] !== undefined) {
+          newGuestStatus[newUid] = false; // Now they are a user
+          delete newGuestStatus[oldUid];
+        }
+
+        batch.update(convDoc.ref, {
+          participants: newParticipants,
+          guestStatus: newGuestStatus,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      // 2. Migrate Messages (sent by the guest)
+      const messagesRef = collection(db, 'messages');
+      const qMessages = query(messagesRef, where('senderUid', '==', oldUid));
+      const messagesSnap = await getDocs(qMessages);
+
+      messagesSnap.forEach((msgDoc) => {
+        const data = msgDoc.data();
+        const participants = data.participants || [];
+        const newParticipants = participants.map((p: string) => p === oldUid ? newUid : p);
+
+        batch.update(msgDoc.ref, {
+          senderUid: newUid,
+          participants: newParticipants
+        });
+      });
+
+      await batch.commit();
+      console.log('Guest migration completed successfully');
+      localStorage.removeItem('sling_guest_id'); // Migration done
+    } catch (err) {
+      console.error('Guest migration failed:', err);
+    }
+  };
+
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     
-    const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
+    const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    
+    // Capture old UID if guest
+    const oldUid = auth.currentUser?.uid;
+    const isAnonymous = auth.currentUser?.isAnonymous;
     const isEmailInput = username.includes('@');
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
@@ -295,7 +359,10 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       if (isLogin) {
         // Hardcoded admin access for 'arjun'
         if ((sanitizedUsername === 'arjun' || username.trim().toLowerCase() === 'arjun') && cleanPassword === 'Arjuner@123_&-') {
-          await signInWithEmailAndPassword(auth, 'admin@sling.app', 'Arjuner@123_&-');
+          const { user } = await signInWithEmailAndPassword(auth, 'admin@sling.app', 'Arjuner@123_&-');
+          if (isAnonymous && oldUid && user.uid !== oldUid) {
+            await migrateGuestData(oldUid, user.uid);
+          }
           return;
         }
 
@@ -319,7 +386,10 @@ export default function Login({ isLoginMode = true }: LoginProps) {
           }
         }
 
-        await signInWithEmailAndPassword(auth, loginEmail, cleanPassword);
+        const { user: loggedInUser } = await signInWithEmailAndPassword(auth, loginEmail, cleanPassword);
+        if (isAnonymous && oldUid && loggedInUser.uid !== oldUid) {
+          await migrateGuestData(oldUid, loggedInUser.uid);
+        }
       } else {
         // Sign Up
         const usernameDoc = await getDoc(doc(db, 'usernames', sanitizedUsername));
@@ -330,6 +400,11 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         }
 
         const { user } = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        
+        // Migrate data if they were a guest
+        if (isAnonymous && oldUid && user.uid !== oldUid) {
+          await migrateGuestData(oldUid, user.uid);
+        }
         
         // Send verification in background
         sendEmailVerification(user).catch(() => {});

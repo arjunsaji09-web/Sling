@@ -11,10 +11,16 @@ export const MONETAG_DIRECT_LINK = "https://omg10.com/4/10885845";
 
 export const checkAdBlock = async (): Promise<boolean> => {
   try {
-    const response = await fetch(MONETAG_DIRECT_LINK, { mode: 'no-cors' });
-    return false; // Connection was successful (or at least not refused)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+    const response = await fetch(MONETAG_DIRECT_LINK, { 
+      mode: 'no-cors', 
+      signal: controller.signal 
+    });
+    clearTimeout(timeoutId);
+    return false; // Connection was successful
   } catch (err) {
-    return true; // Connection refused likely by adblocker
+    return true; // Connection refused or timeout
   }
 };
 

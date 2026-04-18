@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent, useRef } from 'react';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc, serverTimestamp, getDocs, limit, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, auth, storage } from '../lib/firebase';
@@ -42,7 +42,9 @@ import {
   RefreshCw,
   UserX,
   CheckCircle2,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft,
+  Ghost
 } from 'lucide-react';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { Link } from 'react-router-dom';
@@ -56,15 +58,31 @@ interface Message {
   text: string;
   createdAt: any;
   recipientUid: string;
-  emoji?: string;
+  senderUid?: string;
   senderName?: string;
+  conversationId: string;
+  emoji?: string;
   deviceInfo?: string;
   senderCity?: string;
   senderCountry?: string;
   mode?: 'normal' | 'roast' | 'flirt';
   reactions?: { [key: string]: number };
   expiresAt?: any;
-  senderUid?: string;
+}
+
+interface Conversation {
+  id: string;
+  participants: string[];
+  lastMessage: string;
+  lastMessageAt: any;
+  unreadCount: { [uid: string]: number };
+  otherUser?: {
+    uid: string;
+    username: string;
+    photoURL?: string;
+    isVerified?: boolean;
+    isGuest?: boolean;
+  };
 }
 
 const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
@@ -72,15 +90,10 @@ const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 export default function Dashboard() {
   const { user, username, photoURL, role, refreshUser, setPhotoURL, customAppUrl, setCustomAppUrl, globalAppUrl, setGlobalAppUrl } = useAuth();
   const { language, setLanguage, t } = useLanguage();
-  const [messages, setMessages] = useState<Message[]>(() => {
-    try {
-      const cached = localStorage.getItem('sling_messages');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      console.error('Error parsing cached messages:', e);
-      return [];
-    }
-  });
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(messages.length === 0);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -141,7 +154,7 @@ export default function Dashboard() {
     if (revealTimer > 0) {
       const timer = setTimeout(() => {
         if (revealTimer === 1 && revealingHint) {
-          const msg = messages.find(m => m.id === revealingHint);
+          const msg = chatMessages.find(m => m.id === revealingHint) || messages.find(m => m.id === revealingHint);
           if (msg) {
             const newHints = {
               ...revealedHints,
@@ -160,7 +173,7 @@ export default function Dashboard() {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [revealTimer, revealingHint, messages, revealedHints]);
+  }, [revealTimer, revealingHint, chatMessages, messages, revealedHints]);
 
   const handleRevealHint = async (msgId: string) => {
     setAdBlockDetected(false);
@@ -170,7 +183,7 @@ export default function Dashboard() {
       return;
     }
     setRevealingHint(msgId);
-    setRevealTimer(10);
+    setRevealTimer(15);
     openMonetagLink();
   };
 
@@ -184,13 +197,8 @@ export default function Dashboard() {
   const [newAppUrl, setNewAppUrl] = useState('');
   const [savingUrl, setSavingUrl] = useState(false);
 
-  const payWithUpi = () => {
-    const upiUrl = "upi://pay?pa=9947683902&pn=ArjunSaji&cu=INR&tn=SupportSling";
-    window.location.href = upiUrl;
-  };
-
   const requestVerification = () => {
-    const whatsappUrl = `https://wa.me/7306671336?text=${encodeURIComponent("I want to purchase the Sling Blue Tick for my account.")}`;
+    const whatsappUrl = `https://wa.me/7306671336?text=${encodeURIComponent("I am interested in purchasing the official Sling Verification Badge for my account @" + username)}`;
     window.open(whatsappUrl, '_blank');
   };
   const [saveGlobally, setSaveGlobally] = useState(false);
@@ -254,6 +262,56 @@ export default function Dashboard() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const chatEndRef = useState<HTMLDivElement | null>(null);
+
+  const scrollToBottom = () => {
+    // We'll use a standard DOM find or just a manual offset if ref is tricky in this long file
+    const element = document.getElementById('chat-end');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [chatMessages]);
+
+  const handleSendMessage = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user || !activeConversation || !replyText.trim()) return;
+
+    const text = replyText.trim();
+    setReplyText('');
+    setSendingReply(true);
+
+    try {
+      const otherUid = activeConversation.participants.find(p => p !== user.uid);
+      if (!otherUid) return;
+
+      await Promise.all([
+        addDoc(collection(db, 'messages'), {
+          conversationId: activeConversation.id,
+          text,
+          senderUid: user.uid,
+          senderName: username || 'Anonymous',
+          recipientUid: otherUid,
+          createdAt: serverTimestamp()
+        }),
+        updateDoc(doc(db, 'conversations', activeConversation.id), {
+          lastMessage: text,
+          lastMessageAt: serverTimestamp(),
+          [`unreadCount.${otherUid}`]: (activeConversation.unreadCount?.[otherUid] || 0) + 1
+        })
+      ]);
+    } catch (err) {
+      console.error('Error sending message:', err);
+      showToast('Failed to send message', 'error');
+    } finally {
+      setSendingReply(false);
+    }
+  };
   const [showHelp, setShowHelp] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
@@ -298,41 +356,130 @@ export default function Dashboard() {
     }
   };
 
+  // In-memory cache for user info to prevent repeated Firestore calls
+  const userCache = useRef<Map<string, any>>(new Map());
+
   useEffect(() => {
     if (!user) return;
 
     const q = query(
-      collection(db, 'messages'),
-      where('recipientUid', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', user.uid),
+      orderBy('lastMessageAt', 'desc'),
+      limit(20)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      // Process conversations in parallel
+      const convs = await Promise.all(snapshot.docs.map(async (d) => {
+        const data = d.data();
+        const otherUid = data.participants.find((p: string) => p !== user.uid);
+        const isGuest = data.guestStatus?.[otherUid] === true;
+        
+        let otherUserInfo: any = { 
+          username: isGuest ? 'Anonymous Guest' : 'Anonymous User',
+          isGuest
+        };
+        
+        if (otherUid && !isGuest && !otherUid.startsWith('anon_')) {
+          // Check cache first
+          if (userCache.current.has(otherUid)) {
+            otherUserInfo = userCache.current.get(otherUid);
+          } else {
+            try {
+              const userDoc = await getDoc(doc(db, 'users', otherUid));
+              if (userDoc.exists()) {
+                const uData = userDoc.data();
+                otherUserInfo = {
+                  uid: otherUid,
+                  username: uData.username || 'Anonymous User',
+                  photoURL: uData.photoURL,
+                  isVerified: uData.isVerified || false,
+                  isGuest: false
+                };
+                userCache.current.set(otherUid, otherUserInfo);
+              }
+            } catch (e) {
+              console.warn('Error fetching other user info', e);
+            }
+          }
+        } else if (otherUid) {
+          otherUserInfo = {
+            uid: otherUid,
+            username: isGuest ? 'Anonymous Guest' : 'Anonymous User',
+            isGuest
+          };
+        }
+
+        return {
+          id: d.id,
+          ...data,
+          otherUser: otherUserInfo
+        } as Conversation;
+      }));
       
-      if (lastMessageCount !== null && msgs.length > lastMessageCount) {
-        const latestMsg = msgs[0];
-        setShowNotification(latestMsg);
-        playNotificationSound();
-        showWebNotification('Sling: New Message! 🤫', latestMsg.text.substring(0, 50) + (latestMsg.text.length > 50 ? '...' : ''));
-        setTimeout(() => setShowNotification(null), 6000);
+      const totalUnread = convs.reduce((acc, c) => acc + (c.unreadCount?.[user.uid] || 0), 0);
+      
+      if (lastMessageCount !== null && totalUnread > lastMessageCount) {
+        const latestUnreadConv = convs.find(c => (c.unreadCount?.[user.uid] || 0) > 0);
+        if (latestUnreadConv) {
+          playNotificationSound();
+          showWebNotification(
+            `Message from ${latestUnreadConv.otherUser?.username || 'Anonymous User'}`, 
+            latestUnreadConv.lastMessage?.substring(0, 50) + (latestUnreadConv.lastMessage?.length > 50 ? '...' : '')
+          );
+        }
       }
-      
-      setMessages(msgs);
-      setLastMessageCount(msgs.length);
-      localStorage.setItem('sling_messages', JSON.stringify(msgs));
+
+      setLastMessageCount(totalUnread);
+      setConversations(convs);
       setLoading(false);
-    }, () => {
+    }, (err) => {
+      console.error('Conversation subscription error:', err);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user]); // Removed lastMessageCount from dependencies
+  }, [user]);
+
+  // Subscribe to chat messages for active conversation
+  useEffect(() => {
+    if (!user || !activeConversation) {
+      setChatMessages([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'messages'),
+      where('conversationId', '==', activeConversation.id),
+      where('participants', 'array-contains', user.uid),
+      orderBy('createdAt', 'asc'),
+      limit(100)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      setChatMessages(msgs);
+      
+      // Mark as read
+      if (activeConversation.unreadCount?.[user.uid] > 0) {
+        updateDoc(doc(db, 'conversations', activeConversation.id), {
+          [`unreadCount.${user.uid}`]: 0
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, activeConversation]);
+
+  // Search suggest cache
+  const [initialSuggestionsFetched, setInitialSuggestionsFetched] = useState(false);
 
   useEffect(() => {
     const searchUsers = async () => {
       if (searchQuery.length === 0) {
-        // Fetch 50 users as suggestions (increased from 20)
+        if (initialSuggestionsFetched) return;
+        // Fetch 50 users as suggestions
         setSearching(true);
         try {
           const q = query(
@@ -346,9 +493,10 @@ export default function Dashboard() {
               username: d.id,
               photoURL: data.photoURL || null
             };
-          }).sort(() => Math.random() - 0.5); // Randomize suggestions
+          }).sort(() => Math.random() - 0.5); 
           
           setSearchResults(results.filter(r => r.username.toLowerCase() !== username?.toLowerCase()));
+          setInitialSuggestionsFetched(true);
         } catch (err) {
           console.error('Search suggestions failed:', err);
         } finally {
@@ -1197,14 +1345,13 @@ export default function Dashboard() {
                       <p className="text-xs font-mono text-purple-400 break-all">{profileUrl}</p>
                     </div>
 
-                    {/* Support & Status Card */}
                     <div className="glass p-5 rounded-[2rem] border-white/10 space-y-4">
                       <div className="flex items-center gap-3 mb-2">
                         <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400">
                           <Shield className="w-4 h-4" />
                         </div>
                         <div>
-                          <h4 className="text-xs font-black uppercase tracking-widest text-theme">{t('support_status')}</h4>
+                          <h4 className="text-xs font-black uppercase tracking-widest text-theme">{t('account_status')}</h4>
                           <p className="text-[9px] text-gray-500">{t('manage_verification')}</p>
                         </div>
                       </div>
@@ -1216,20 +1363,9 @@ export default function Dashboard() {
                         >
                           <div className="flex items-center gap-3">
                             <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">{t('get_blue_tick')}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Get Official Verification</span>
                           </div>
                           <ChevronRight className="w-4 h-4 text-blue-400/50 group-hover:translate-x-1 transition-transform" />
-                        </button>
-                        
-                        <button 
-                          onClick={payWithUpi}
-                          className="w-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 py-4 rounded-xl flex items-center justify-between px-5 transition-all active:scale-95 group"
-                        >
-                          <div className="flex items-center gap-3">
-                            <Heart fill="currentColor" className="w-4 h-4 text-amber-400" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">{t('donate_dev')}</span>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-amber-400/50 group-hover:translate-x-1 transition-transform" />
                         </button>
                       </div>
                     </div>
@@ -1269,319 +1405,90 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Messages Section */}
+              {/* Conversations Section */}
               <div className="flex items-center justify-between mb-6 px-2">
                 <h3 className="text-xl font-bold flex items-center gap-2 text-theme">
                   <MessageCircle className="w-5 h-5 text-purple-400" />
                   {t('inbox')}
                   <span className="bg-purple-500/10 dark:bg-white/10 px-2 py-0.5 rounded-full text-xs font-medium text-purple-600 dark:text-gray-400">
-                    {messages.length}
+                    {conversations.length}
                   </span>
                 </h3>
-                {messages.length === 0 && !loading && (
-                  <button 
-                    onClick={addFakeMessage}
-                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
-                  >
-                    <Zap className="w-3 h-3" />
-                    Try Demo Message
-                  </button>
-                )}
               </div>
 
-              {loading && messages.length === 0 ? (
+              {loading && conversations.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                   <div className="w-12 h-12 border-4 border-white/10 border-t-purple-500 rounded-full animate-spin" />
-                  <p className="text-gray-500 text-sm animate-pulse">Checking for messages...</p>
+                  <p className="text-gray-500 text-sm animate-pulse">Checking for conversations...</p>
                 </div>
-              ) : messages.length === 0 ? (
+              ) : conversations.length === 0 ? (
                 <motion.div 
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="glass p-12 rounded-[2rem] text-center flex flex-col items-center"
                 >
                   <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
-                    <Info className="w-8 h-8 text-gray-400" />                  </div>
-                  <h4 className="text-lg font-bold mb-2 text-theme">{t('no_messages')}</h4>
+                    <Info className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h4 className="text-lg font-bold mb-2 text-theme">No conversations yet</h4>
                   <p className="text-gray-500 dark:text-gray-400 text-sm max-w-[200px]">
-                    {t('share_to_start')}
+                    Share your profile link to start receiving anonymous messages!
                   </p>
                 </motion.div>
               ) : (
-                <div className="grid gap-4">
+                <div className="grid gap-3">
                   <AnimatePresence mode="popLayout">
-                    {messages.map((msg, index) => (
-                      <motion.div
-                        key={msg.id}
+                    {conversations.map((conv, index) => (
+                      <motion.button
+                        key={conv.id}
                         layout
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="glass p-6 rounded-3xl group relative overflow-hidden"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ delay: index * 0.03 }}
+                        onClick={() => setActiveConversation(conv)}
+                        className="glass p-5 rounded-3xl flex items-center gap-4 text-left hover:bg-white/5 transition-all group relative border border-white/5"
                       >
-                        <div className="flex items-start justify-between relative z-10">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-2xl">{msg.emoji || '👻'}</span>
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-purple-400">
-                                    {t('from')}: {msg.senderName || t('anonymous')}
-                                  </span>
-                                  {msg.mode && msg.mode !== 'normal' && (
-                                    <span className={cn(
-                                      "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider",
-                                      msg.mode === 'roast' ? "bg-orange-500/20 text-orange-400" : "bg-pink-500/20 text-pink-400"
-                                    )}>
-                                      {msg.mode}
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                                  {formatMessageDate(msg.createdAt)} • {msg.deviceInfo || 'Web'}
-                                </span>
-                                {msg.expiresAt && (
-                                  <span className="text-[10px] text-red-400 font-bold flex items-center gap-1 mt-1">
-                                    <Clock className="w-3 h-3" />
-                                    {getRemainingTime(msg.expiresAt)}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <p className="text-lg font-medium leading-relaxed pr-8 mb-4 text-theme">
-                              {msg.text}
-                            </p>
-
-                            {/* Revealed Hint */}
-                            {revealedHints[msg.id] && (
-                              <motion.div 
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2 relative overflow-hidden group"
-                              >
-                                <div className="absolute top-0 right-0 p-2 opacity-20">
-                                  <Sparkles className="w-8 h-8 text-amber-500" />
-                                </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-500/60 mb-1">Sender Location & Device</p>
-                                  <div className="flex items-center gap-4">
-                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                    <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                    <span className="text-sm font-bold text-theme truncate">
-                                      {revealedHints[msg.id].city}
-                                      {revealedHints[msg.id].country && revealedHints[msg.id].country !== 'Unknown' && `, ${revealedHints[msg.id].country}`}
-                                    </span>
-                                  </div>
-                                  <div className="w-1 h-1 bg-white/10 rounded-full shrink-0" />
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <Globe className="w-3.5 h-3.5 text-amber-500" />
-                                    <span className="text-sm font-bold text-theme">{revealedHints[msg.id].device}</span>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )}
-
-                            {/* Reactions */}
-                            <div className="flex flex-wrap gap-2 mb-4">
-                              {['❤️', '😂', '😳', '🔥'].map(emoji => (
-                                <motion.button
-                                  key={emoji}
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={() => reactToMessage(msg.id, emoji)}
-                                  className="bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1 rounded-full text-xs flex items-center gap-1 transition-all"
-                                >
-                                  <span>{emoji}</span>
-                                  <span className="text-gray-400 font-bold">{msg.reactions?.[emoji] || 0}</span>
-                                </motion.button>
-                              ))}
-                            </div>
-
-                            {/* Actions & Smart Replies (Vertical Layout) */}
-                            <div className="flex flex-col gap-2 mb-6 px-1">
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {/* Primary Actions */}
-                                <button 
-                                  onClick={() => setSelectedMessage(msg)}
-                                  className="flex items-center justify-center gap-2 text-[10px] font-bold text-gray-400 hover:text-white transition-colors bg-white/5 px-3 py-3 rounded-xl border border-white/5"
-                                >
-                                  <Share2 className="w-3 h-3" />
-                                  Story
-                                </button>
-                                
-                                <button 
-                                  onClick={() => getGuessHint(msg)}
-                                  className="flex items-center justify-center gap-2 text-[10px] font-bold text-purple-400 hover:text-purple-300 transition-colors bg-purple-500/10 px-3 py-3 rounded-xl border border-purple-500/20"
-                                >
-                                  <Search className="w-3 h-3" />
-                                  {t('guess')}
-                                </button>
-
-                                <button 
-                                  onClick={() => handleRevealHint(msg.id)}
-                                  disabled={!!revealingHint || !!revealedHints[msg.id]}
-                                  className={cn(
-                                    "flex items-center justify-center gap-2 text-[10px] font-bold transition-colors px-3 py-3 rounded-xl border",
-                                    revealedHints[msg.id] 
-                                     ? "bg-green-500/10 text-green-400 border-green-500/20" 
-                                     : "bg-amber-500/10 text-amber-400 hover:text-amber-300 border-amber-500/20"
-                                  )}
-                                >
-                                  <Zap className="w-3 h-3" />
-                                  {revealedHints[msg.id] ? t('hint_revealed') : t('reveal_hint')}
-                                </button>
-
-                                <button 
-                                  onClick={() => setReplyingTo(msg.id)}
-                                  className="flex items-center justify-center gap-2 text-[10px] font-bold text-green-400 hover:text-green-300 transition-colors bg-green-500/10 px-3 py-3 rounded-xl border border-green-500/20"
-                                >
-                                  <Send className="w-3 h-3" />
-                                  Reply
-                                </button>
-                              </div>
-
-                              {revealedHints[msg.id] && (
-                                <motion.div 
-                                  initial={{ opacity: 0, y: 5 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="mt-2 p-3 bg-green-500/5 border border-green-500/10 rounded-xl flex items-center justify-between"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <Globe className="w-3 h-3 text-green-400" />
-                                    <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">{revealedHints[msg.id].city}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Zap className="w-3 h-3 text-green-400" />
-                                    <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">{revealedHints[msg.id].device}</span>
-                                  </div>
-                                </motion.div>
-                              )}
-
-                              <div className="grid grid-cols-2 gap-2">
-                                <button 
-                                  onClick={() => reportMessage(msg)}
-                                  className="flex items-center justify-center gap-2 text-[10px] font-bold text-orange-400 hover:text-orange-300 transition-colors bg-orange-500/10 px-3 py-3 rounded-xl border border-orange-500/20"
-                                >
-                                  <AlertCircle className="w-3 h-3" />
-                                  {t('report')}
-                                </button>
-                                
-                                <button 
-                                  onClick={() => blockUser(msg)}
-                                  disabled={!msg.senderUid}
-                                  className="flex items-center justify-center gap-2 text-[10px] font-bold text-red-400 hover:text-red-300 transition-colors bg-red-500/10 px-3 py-3 rounded-xl border border-red-500/20 disabled:opacity-30 disabled:grayscale"
-                                >
-                                  <Shield className="w-3 h-3" />
-                                  {t('block')}
-                                </button>
-                              </div>
-
-                              {/* AI Smart Replies - Vertical List */}
-                              <div className="flex flex-col gap-2 mt-1">
-                                {getSmartReplies(msg.text).map((reply, idx) => (
-                                  <motion.button
-                                    key={reply}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: idx * 0.1 }}
-                                    whileHover={{ x: 5, backgroundColor: 'rgba(168, 85, 247, 0.1)' }}
-                                    whileTap={{ scale: 0.98 }}
-                                    onClick={() => {
-                                      setReplyingTo(msg.id);
-                                      setReplyText(reply);
-                                    }}
-                                    className="w-full bg-purple-500/5 border border-purple-500/10 px-4 py-3 rounded-xl text-xs font-medium text-purple-400/80 transition-all flex items-center justify-between group"
-                                  >
-                                    <span className="truncate flex items-center gap-2">
-                                      <Sparkles className="w-3 h-3 opacity-50" />
-                                      AI: "{reply}"
-                                    </span>
-                                    <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </motion.button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Custom Reply Input */}
-                            <AnimatePresence>
-                              {replyingTo === msg.id && (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: 'auto' }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  className="mt-4 space-y-3 bg-theme p-4 rounded-2xl border border-white/10"
-                                >
-                                  {!msg.senderUid ? (
-                                    <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl text-xs text-orange-400 flex items-center gap-3">
-                                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                                      <p>This sender is anonymous and hasn't logged in. You can't reply directly, but you can share this to your Story!</p>
-                                    </div>
-                                  ) : (
-                                    <div className="flex flex-col gap-3">
-                                      <div className="relative">
-                                        <input 
-                                          type="text"
-                                          value={replyText}
-                                          onChange={(e) => setReplyText(e.target.value)}
-                                          placeholder="Type your reply..."
-                                          className="w-full input-theme rounded-xl py-4 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                                          autoFocus
-                                        />
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          onClick={() => sendQuickReply(msg.senderUid!, replyText)}
-                                          disabled={!replyText || sendingReply}
-                                          className="flex-1 gradient-bg py-4 rounded-xl text-white font-bold shadow-lg shadow-purple-500/20 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                                        >
-                                          {sendingReply ? (
-                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                          ) : (
-                                            <>
-                                              <Send className="w-5 h-5" />
-                                              <span>Send Reply</span>
-                                            </>
-                                          )}
-                                        </button>
-                                        <button 
-                                          onClick={() => {
-                                            setReplyingTo(null);
-                                            setReplyText('');
-                                          }}
-                                          className="px-4 py-4 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-gray-400 transition-colors"
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-
-                            {guessHint && (
-                              <motion.div 
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                className="mt-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-2xl text-xs font-bold text-purple-400 flex items-center gap-2"
-                              >
-                                <Sparkles className="w-4 h-4" />
-                                {guessHint}
-                              </motion.div>
+                        <div className="relative">
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-white/10 flex items-center justify-center overflow-hidden">
+                            {conv.otherUser?.photoURL ? (
+                              <img src={conv.otherUser.photoURL} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <UserIcon className="w-6 h-6 text-gray-500" />
                             )}
                           </div>
-                          <button 
-                            onClick={() => deleteMessage(msg.id)}
-                            className="p-2 text-gray-400 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
+                          {conv.unreadCount?.[user?.uid || ''] > 0 && (
+                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-purple-500 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-gray-900 animate-pulse">
+                              {conv.unreadCount[user?.uid || '']}
+                            </div>
+                          )}
                         </div>
-                        
-                        {/* Subtle background decoration */}
-                        <div className="absolute -bottom-4 -right-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                          <MessageCircle className="w-20 h-20" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className={cn(
+                              "font-bold text-theme truncate",
+                              conv.otherUser?.isGuest && "text-purple-400"
+                            )}>
+                              {conv.otherUser?.username || 'Anonymous User'}
+                            </span>
+                            {conv.otherUser?.isVerified && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" fill="currentColor" />
+                            )}
+                            {conv.otherUser?.isGuest && (
+                              <Ghost className="w-3 h-3 text-purple-400/50" />
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500 line-clamp-1 group-hover:text-gray-400 transition-colors">
+                            {conv.lastMessage || 'Sent an anonymous message'}
+                          </p>
                         </div>
-                      </motion.div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[10px] font-bold text-gray-600 uppercase">
+                            {formatMessageDate(conv.lastMessageAt)}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-gray-700 group-hover:text-purple-400 transition-colors" />
+                        </div>
+                      </motion.button>
                     ))}
                   </AnimatePresence>
                 </div>
@@ -1763,7 +1670,8 @@ export default function Dashboard() {
             text: 'This is a test Sling message! It looks just like an SMS. 🤫',
             createdAt: new Date(),
             recipientUid: user?.uid || '',
-            senderName: 'Sling Bot'
+            senderName: 'Sling Bot',
+            conversationId: 'test-conv'
           };
           setShowNotification(testMsg);
           playNotificationSound();
@@ -2195,6 +2103,162 @@ export default function Dashboard() {
             >
               {t('got_it')}
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {activeConversation && (
+          <motion.div
+            initial={{ opacity: 0, x: '100%' }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed inset-0 z-[150] bg-[#0a0a0a] flex flex-col"
+          >
+            {/* Chat Header */}
+            <div className="glass px-4 py-3 flex items-center gap-3 shrink-0 border-b border-white/5">
+              <button 
+                onClick={() => setActiveConversation(null)}
+                className="p-2 hover:bg-white/5 rounded-full transition-colors"
+              >
+                <ChevronLeft className="w-6 h-6 text-theme" />
+              </button>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-white/10 flex items-center justify-center overflow-hidden">
+                {activeConversation.otherUser?.photoURL ? (
+                  <img src={activeConversation.otherUser.photoURL} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-gray-400" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-bold text-theme truncate">{activeConversation.otherUser?.username || 'Anonymous User'}</h3>
+                  {activeConversation.otherUser?.isVerified && (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" fill="currentColor" />
+                  )}
+                </div>
+                <p className="text-[10px] text-green-500 font-bold uppercase tracking-widest">Active Now</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => showToast('Secure Thread Active', 'success')}
+                  className="p-2 text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  <Shield className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar">
+              {chatMessages.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center opacity-40">
+                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
+                    <MessageCircle className="w-8 h-8" />
+                  </div>
+                  <p className="text-sm font-bold text-theme">No messages yet.</p>
+                  <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-1">Start the conversation!</p>
+                </div>
+              ) : (
+                chatMessages.map((msg, idx) => {
+                  const isMe = msg.senderUid === user?.uid;
+                  const showDate = idx === 0 || formatMessageDate(msg.createdAt) !== formatMessageDate(chatMessages[idx-1]?.createdAt);
+                  
+                  return (
+                    <div key={msg.id} className="flex flex-col">
+                      {showDate && (
+                        <div className="flex justify-center my-4">
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-600 bg-white/5 px-3 py-1 rounded-full">
+                            {formatMessageDate(msg.createdAt)}
+                          </span>
+                        </div>
+                      )}
+                      <div className={cn(
+                        "flex flex-col max-w-[85%] group",
+                        isMe ? "self-end items-end" : "self-start items-start"
+                      )}>
+                        <motion.div 
+                          initial={{ scale: 0.9, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className={cn(
+                            "px-4 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all",
+                            isMe 
+                              ? "bg-purple-600 text-white rounded-tr-none" 
+                              : "bg-[#1a1a1a] text-theme rounded-tl-none border border-white/5"
+                          )}
+                        >
+                          {msg.text}
+                        </motion.div>
+                        <div className="flex items-center gap-2 mt-1 px-1">
+                          <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                            {typeof msg.createdAt?.toDate === 'function' ? msg.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}
+                          </span>
+                          {!isMe && (
+                            <button 
+                              onClick={() => handleRevealHint(msg.id)}
+                              className={cn(
+                                "text-[8px] font-black uppercase tracking-[0.2em] transition-colors",
+                                revealedHints[msg.id] ? "text-green-500" : "text-amber-500 hover:text-amber-400"
+                              )}
+                            >
+                              {revealedHints[msg.id] ? 'Hint Revealed' : 'Reveal Hint'}
+                            </button>
+                          )}
+                        </div>
+                        
+                        {revealedHints[msg.id] && !isMe && (
+                          <motion.div 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className="mt-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex flex-col gap-1 w-full"
+                          >
+                             <div className="flex items-center gap-2">
+                               <MapPin className="w-3 h-3 text-amber-500" />
+                               <span className="text-[9px] font-bold text-amber-500 uppercase">{revealedHints[msg.id].city}, {revealedHints[msg.id].country}</span>
+                             </div>
+                             <div className="flex items-center gap-2">
+                               <Globe className="w-3 h-3 text-amber-500" />
+                               <span className="text-[9px] font-bold text-amber-500 uppercase">{revealedHints[msg.id].device}</span>
+                             </div>
+                          </motion.div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div id="chat-end" />
+            </div>
+
+            {/* Chat Input */}
+            <form 
+              onSubmit={handleSendMessage} 
+              className="p-4 glass shrink-0 flex items-center gap-2 border-t border-white/5"
+            >
+              <div className="flex-1 relative flex items-center">
+                <input 
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Type a professional response..."
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm focus:outline-none focus:border-purple-500/50 transition-all text-theme pr-12"
+                />
+                <button 
+                   type="button"
+                   onClick={() => showToast('Premium Emojis Locked. Watch ad to unlock.', 'error')}
+                   className="absolute right-3 p-1 text-gray-500 hover:text-purple-400 transition-colors"
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
+              </div>
+              <button 
+                type="submit"
+                disabled={!replyText.trim() || sendingReply}
+                className="p-3.5 bg-purple-600 text-white rounded-2xl disabled:opacity-50 disabled:grayscale transition-all active:scale-95 shadow-lg shadow-purple-600/20"
+              >
+                {sendingReply ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="w-5 h-5 rotate-[-45deg] translate-x-0.5" />}
+              </button>
+            </form>
           </motion.div>
         )}
       </AnimatePresence>
