@@ -89,6 +89,7 @@ const EMOJIS = ['👀', '🔥', '❤️', '🤫', '✨', '👻'];
 
 export default function Dashboard() {
   const { user, username, photoURL, role, refreshUser, setPhotoURL, customAppUrl, setCustomAppUrl, globalAppUrl, setGlobalAppUrl } = useAuth();
+  const isGuest = user?.isAnonymous;
   const { language, setLanguage, t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -120,6 +121,34 @@ export default function Dashboard() {
       return {};
     }
   });
+
+  const [topAdmirers, setTopAdmirers] = useState<{username: string, photoURL?: string, count: number}[]>([]);
+  const [revealedAdmirers, setRevealedAdmirers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('sling_revealed_admirers');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [revealingAdmirer, setRevealingAdmirer] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Generate/Compute Top Admirers from unique participants in conversations
+    if (conversations.length > 0) {
+      const admirers = conversations
+        .filter(c => c.otherUser && !c.otherUser.isGuest)
+        .map(c => ({
+          username: c.otherUser?.username || 'user',
+          photoURL: c.otherUser?.photoURL,
+          count: (c.unreadCount ? Object.values(c.unreadCount).reduce((a, b) => a + b, 0) : 0) + 1 // Simple ranking
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+      
+      setTopAdmirers(admirers);
+    }
+  }, [conversations]);
 
   useEffect(() => {
     // Check if onboarding is needed
@@ -153,27 +182,46 @@ export default function Dashboard() {
   useEffect(() => {
     if (revealTimer > 0) {
       const timer = setTimeout(() => {
-        if (revealTimer === 1 && revealingHint) {
-          const msg = chatMessages.find(m => m.id === revealingHint) || messages.find(m => m.id === revealingHint);
-          if (msg) {
-            const newHints = {
-              ...revealedHints,
-              [msg.id]: {
-                city: msg.senderCity || 'Unknown City',
-                country: msg.senderCountry || 'Unknown Country',
-                device: msg.deviceInfo || 'Unknown Device'
-              }
-            };
-            setRevealedHints(newHints);
-            localStorage.setItem('sling_revealed_hints', JSON.stringify(newHints));
+        if (revealTimer === 1) {
+          if (revealingHint) {
+            const msg = chatMessages.find(m => m.id === revealingHint) || messages.find(m => m.id === revealingHint);
+            if (msg) {
+              const newHints = {
+                ...revealedHints,
+                [msg.id]: {
+                  city: msg.senderCity || 'Unknown City',
+                  country: msg.senderCountry || 'Unknown Country',
+                  device: msg.deviceInfo || 'Unknown Device'
+                }
+              };
+              setRevealedHints(newHints);
+              localStorage.setItem('sling_revealed_hints', JSON.stringify(newHints));
+            }
+            setRevealingHint(null);
+          } else if (revealingAdmirer) {
+            const newRevealed = [...revealedAdmirers, revealingAdmirer];
+            setRevealedAdmirers(newRevealed);
+            localStorage.setItem('sling_revealed_admirers', JSON.stringify(newRevealed));
+            setRevealingAdmirer(null);
           }
-          setRevealingHint(null);
         }
         setRevealTimer(prev => prev - 1);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [revealTimer, revealingHint, chatMessages, messages, revealedHints]);
+  }, [revealTimer, revealingHint, revealingAdmirer, chatMessages, messages, revealedHints, revealedAdmirers]);
+
+  const handleRevealAdmirer = async (username: string) => {
+    setAdBlockDetected(false);
+    const isBlocked = await checkAdBlock();
+    if (isBlocked) {
+      setAdBlockDetected(true);
+      return;
+    }
+    setRevealingAdmirer(username);
+    setRevealTimer(15);
+    openMonetagLink();
+  };
 
   const handleRevealHint = async (msgId: string) => {
     setAdBlockDetected(false);
@@ -236,14 +284,16 @@ export default function Dashboard() {
 
   const getProfileUrl = () => {
     // Priority: 
-    // 1. Global URL set by Admin (Source of truth for everyone)
-    // 2. Custom URL set by user (if any)
+    // 1. Global URL set by Admin
+    // 2. Custom URL set by user
     // 3. Environment variable
     // 4. Current origin
-    const base = (globalAppUrl || customAppUrl || (process.env as any).APP_URL || window.location.origin).replace(/\/$/, '');
+    const base = (globalAppUrl || customAppUrl || (import.meta as any).env?.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
     
+    if (!username) return base; // Fallback to base if username loading
+
     // If the base already ends with the username, don't append it again
-    if (base.toLowerCase().endsWith(`/${username?.toLowerCase()}`)) {
+    if (base.toLowerCase().endsWith(`/${username.toLowerCase()}`)) {
       return base;
     }
     return `${base}/${username}`;
@@ -293,6 +343,7 @@ export default function Dashboard() {
       await Promise.all([
         addDoc(collection(db, 'messages'), {
           conversationId: activeConversation.id,
+          participants: activeConversation.participants,
           text,
           senderUid: user.uid,
           senderName: username || 'Anonymous',
@@ -322,6 +373,9 @@ export default function Dashboard() {
     if (typeof Notification !== 'undefined') {
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
+      if (permission === 'granted') {
+        showToast(t('notifications_enabled'), 'success');
+      }
     }
   };
 
@@ -369,6 +423,20 @@ export default function Dashboard() {
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
+      // Handle new message notifications
+      snapshot.docChanges().forEach(change => {
+        const data = change.doc.data();
+        const isNew = change.type === 'added';
+        const isUpdate = change.type === 'modified';
+        const lastMsgAt = data.lastMessageAt?.toMillis?.() || 0;
+        
+        // Only notify if it's recent and not sent by current user
+        if ((isNew || isUpdate) && data.participants[0] !== user.uid && Date.now() - lastMsgAt < 10000) {
+          playNotificationSound();
+          showWebNotification(t('new_message_received'), data.lastMessage || 'Sent a message');
+        }
+      });
+
       // Process conversations in parallel
       const convsRaw = await Promise.all(snapshot.docs.map(async (d) => {
         const data = d.data();
@@ -466,8 +534,8 @@ export default function Dashboard() {
       
       // Client-side sort to avoid composite index requirement
       msgs.sort((a, b) => {
-        const timeA = (a as any).createdAt?.toMillis?.() || (a as any).createdAt || 0;
-        const timeB = (b as any).createdAt?.toMillis?.() || (b as any).createdAt || 0;
+        const timeA = (a as any).createdAt?.toMillis?.() || Date.now();
+        const timeB = (b as any).createdAt?.toMillis?.() || Date.now();
         return timeA - timeB;
       });
       
@@ -943,8 +1011,11 @@ export default function Dashboard() {
     if (!user) return;
     setSendingReply(true);
     try {
+      const conversationId = [user.uid, recipientUid].sort().join('_');
       await addDoc(collection(db, 'messages'), {
         text,
+        conversationId,
+        participants: [user.uid, recipientUid],
         senderName: username,
         deviceInfo: 'Web',
         mode: 'normal',
@@ -996,7 +1067,10 @@ export default function Dashboard() {
 
     await addDoc(collection(db, 'messages'), {
       text: randomMsg,
+      participants: [user.uid, 'system'],
+      conversationId: [user.uid, 'system'].sort().join('_'),
       recipientUid: user.uid,
+      senderUid: 'system',
       createdAt: serverTimestamp(),
       emoji: randomEmoji
     });
@@ -1041,20 +1115,110 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* Toast */}
+      {/* Professional 15s Ad Countdown Overlay */}
       <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className={cn(
-              "fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 min-w-[280px]",
-              toast.type === 'success' ? "bg-green-500 text-white" : "bg-red-500 text-white"
-            )}
+        {revealTimer > 0 && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center"
           >
-            {toast.type === 'success' ? <Check className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-            <span className="font-bold text-sm">{toast.message}</span>
+            <div className="absolute inset-0 overflow-hidden opacity-20">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-purple-600/30 blur-[120px] rounded-full animate-pulse" />
+            </div>
+            
+            <div className="relative z-10 w-full max-w-sm">
+              <div className="relative mb-12">
+                <svg className="w-32 h-32 mx-auto rotate-[-90deg]">
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r="60"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    className="text-white/10"
+                  />
+                  <motion.circle
+                    cx="64"
+                    cy="64"
+                    r="60"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    strokeDasharray="377"
+                    animate={{ strokeDashoffset: 377 - (377 * revealTimer) / 15 }}
+                    className="text-purple-500"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-4xl font-black text-white">{revealTimer}</span>
+                </div>
+              </div>
+
+              <h3 className="text-2xl font-black text-white mb-4 uppercase tracking-[0.2em]">Verifying...</h3>
+              <p className="text-gray-400 text-sm font-medium leading-relaxed mb-8">
+                Do not close this window while we verify your request. You will be granted access in a few seconds.
+              </p>
+
+              <div className="flex items-center justify-center gap-3 py-4 px-6 bg-white/5 rounded-2xl border border-white/10 mb-8">
+                <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
+                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Checking direct link...</span>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => openMonetagLink()}
+                  className="w-full bg-white/10 hover:bg-white/20 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-white/10 group"
+                >
+                  Link Not Opening? <span className="text-purple-400 group-hover:text-purple-300">Click Here</span>
+                </button>
+                <button 
+                onClick={() => {
+                  setRevealTimer(0);
+                  setRevealingHint(null);
+                  setRevealingAdmirer(null);
+                }}
+                className="text-gray-600 hover:text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] py-2 transition-colors"
+              >
+                Cancel Request
+              </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AdBlock Warning Modal */}
+      <AnimatePresence>
+        {adBlockDetected && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-[#121212] border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full text-center"
+            >
+              <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-white mb-3 uppercase tracking-tight">Ad-Blocker Detected</h3>
+              <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                To keep Sling free and unlock premium features, please disable your ad-blocker and try again.
+              </p>
+              <button 
+                onClick={() => setAdBlockDetected(false)}
+                className="w-full gradient-bg py-4 rounded-xl font-black uppercase tracking-widest text-xs text-white shadow-lg shadow-purple-500/20"
+              >
+                Got it
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1148,13 +1312,13 @@ export default function Dashboard() {
               <Shield className="w-5 h-5" />
             </Link>
           )}
-          <button onClick={logout} className="p-2 text-gray-400 hover:text-theme transition-colors" title="Logout">
+          <button onClick={logout} className="p-2 text-gray-400 hover:text-theme transition-colors" title={t('logout')}>
             <LogOut className="w-5 h-5" />
           </button>
           <button 
             onClick={() => setShowDeleteAccount(true)} 
             className="p-2 text-gray-600 hover:text-red-400 transition-colors"
-            title="Delete Account"
+            title={t('delete_account_title')}
           >
             <UserX className="w-5 h-5" />
           </button>
@@ -1175,7 +1339,7 @@ export default function Dashboard() {
             )}
           >
             <MessageCircle className="w-4 h-4" />
-            Inbox
+            {t('inbox')}
             {showNotification && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-theme animate-bounce">
                 !
@@ -1190,7 +1354,7 @@ export default function Dashboard() {
             )}
           >
             <Users className="w-4 h-4" />
-            Find Friends
+            {t('find_friends_tab')}
           </button>
         </div>
 
@@ -1202,6 +1366,33 @@ export default function Dashboard() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
             >
+              {/* Guest Conversion Lock Banner */}
+              {isGuest && (
+                <motion.div 
+                  initial={{ y: -50, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  className="mb-8"
+                >
+                  <div className="bg-gradient-to-r from-purple-600/90 to-pink-600/90 backdrop-blur-xl p-6 rounded-3xl border border-white/20 shadow-2xl flex flex-col items-center justify-between gap-4 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-inner">
+                        <Ghost className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-white uppercase tracking-widest leading-tight mb-1">{t('guest_account')} 🔓</h4>
+                        <p className="text-[10px] text-white/70 font-bold uppercase tracking-widest leading-relaxed max-w-[200px]">{t('convert_desc')}</p>
+                      </div>
+                    </div>
+                    <Link 
+                      to="/signup" 
+                      className="w-full bg-white text-purple-600 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl"
+                    >
+                      {t('claim_profile')}
+                    </Link>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Profile Card */}
               <motion.div 
                 initial={{ opacity: 0, y: 20 }}
@@ -1230,9 +1421,9 @@ export default function Dashboard() {
                             exit={{ opacity: 0, scale: 0.8 }}
                             className="absolute inset-0 overlay flex flex-col items-center justify-center p-2 gap-2"
                           >
-                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('boy')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👦 Boy</motion.button>
-                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('girl')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👧 Girl</motion.button>
-                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('neutral')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👤 Neutral</motion.button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('boy')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👦 {t('boy')}</motion.button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('girl')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👧 {t('girl')}</motion.button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => updateAvatarStyle('neutral')} className="w-full py-1 bg-white/10 rounded-lg text-[10px] font-bold hover:bg-white/20">👤 {t('neutral')}</motion.button>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -1263,17 +1454,17 @@ export default function Dashboard() {
                         <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
                           <Shield className="w-5 h-5 text-purple-400" />
                         </div>
-                        <h3 className="text-sm font-bold text-theme uppercase tracking-widest">Admin Dashboard</h3>
+                        <h3 className="text-sm font-bold text-theme uppercase tracking-widest">{t('admin_dashboard')}</h3>
                       </div>
                       <p className="text-[11px] text-gray-400 mb-4 leading-relaxed">
-                        You have full control. Manage users, messages, or set the <span className="text-purple-400 font-bold">Global App Link</span> for everyone.
+                        {t('admin_dashboard_desc')}
                       </p>
                       <div className="flex gap-2">
                         <Link 
                           to="/admin-secure-panel"
                           className="flex-1 bg-purple-600 text-white py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-600/20"
                         >
-                          Control Panel
+                          {t('control_panel')}
                         </Link>
                         <button 
                           onClick={() => {
@@ -1283,14 +1474,14 @@ export default function Dashboard() {
                           }}
                           className="flex-1 bg-white/5 border border-white/10 text-theme py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
                         >
-                          Global Link
+                          {t('global_link')}
                         </button>
                       </div>
                     </motion.div>
                   )}
 
                   {/* Only Admin sees the Link Issue warning to fix it globally */}
-                  {isLocalhost && role === 'admin' && (
+                    {isLocalhost && role === 'admin' && (
                     <motion.div 
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -1298,10 +1489,10 @@ export default function Dashboard() {
                     >
                       <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
                         <AlertTriangle className="w-3 h-3" />
-                        Global Link Required
+                        {t('global_link_required')}
                       </p>
                       <p className="text-[10px] text-gray-400 mb-3">
-                        The current link contains "localhost". Set a global link for all users.
+                        {t('localhost_link_warning')}
                       </p>
                       <button 
                         onClick={() => {
@@ -1311,7 +1502,7 @@ export default function Dashboard() {
                         }}
                         className="text-[10px] bg-amber-500 text-white px-4 py-2 rounded-lg font-bold uppercase tracking-widest hover:bg-amber-600 transition-colors"
                       >
-                        Set Global Link
+                        {t('set_global_link')}
                       </button>
                     </motion.div>
                   )}
@@ -1325,35 +1516,52 @@ export default function Dashboard() {
                         <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
                           {copied ? <Check className="w-5 h-5 text-white" /> : <Copy className="w-5 h-5 text-white" />}
                         </div>
-                        <span className="font-black text-lg uppercase tracking-tight">{copied ? t('copied') : 'Copy My Sling Link'}</span>
+                        <span className="font-black text-lg uppercase tracking-tight">{copied ? t('copied') : t('copy_sling_link')}</span>
                       </button>
 
                       <div className="grid grid-cols-2 gap-3">
-                        <button 
-                          onClick={() => {
-                            const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
-                            const text = `${randomPrompt}\n\n${profileUrl}`;
-                            navigator.clipboard.writeText(text);
-                            showToast('Catchy link copied! 🔥', 'success');
-                          }}
-                          className="bg-white/5 hover:bg-white/10 border border-white/10 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                        >
-                          <Sparkles className="w-4 h-4 text-yellow-400" />
-                          <span className="text-xs font-bold uppercase tracking-widest">Catchy Link</span>
-                        </button>
-                        
-                        <button 
-                          onClick={() => showToast('Sling Polls coming soon! 🗳️', 'success')}
-                          className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                        >
+                        <motion.button 
+                          whileTap={{ scale: 0.95 }}
+                          onClick={async () => {
+                            try {
+                              const randomPrompt = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
+                              const text = `${randomPrompt}\n\n${profileUrl}`;
+                              
+                              if (navigator.share && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+                                await navigator.share({
+                                  title: 'Sling',
+                                  text: randomPrompt,
+                                  url: profileUrl
+                                });
+                              } else {
+                                await navigator.clipboard.writeText(text);
+                                showToast(t('catchy_link_toast'), 'success');
+                              }
+                            } catch (err) {
+                              if ((err as Error).name !== 'AbortError') {
+                                showToast('Failed to share link', 'error');
+                              }
+                            }
+                        }}
+                        className="bg-white/5 hover:bg-white/10 border border-white/10 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                      >
+                        <Sparkles className="w-4 h-4 text-yellow-400" />
+                        <span className="text-xs font-bold uppercase tracking-widest">{t('catchy_link')}</span>
+                      </motion.button>
+                      
+                      <motion.button 
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => showToast(t('polls_coming_soon'), 'success')}
+                        className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                      >
                           <Zap className="w-4 h-4 text-purple-400" />
-                          <span className="text-xs font-bold uppercase tracking-widest">Sling Polls</span>
-                        </button>
+                          <span className="text-xs font-bold uppercase tracking-widest">{t('sling_polls')}</span>
+                        </motion.button>
                       </div>
                     </div>
                     
                     <div className="p-4 bg-theme rounded-2xl border border-white/5 text-center">
-                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">Your Public Address</p>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">{t('public_address')}</p>
                       <p className="text-xs font-mono text-purple-400 break-all">{profileUrl}</p>
                     </div>
 
@@ -1375,7 +1583,7 @@ export default function Dashboard() {
                         >
                           <div className="flex items-center gap-3">
                             <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Get Official Verification</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">{t('get_official_verification')}</span>
                           </div>
                           <ChevronRight className="w-4 h-4 text-blue-400/50 group-hover:translate-x-1 transition-transform" />
                         </button>
@@ -1390,16 +1598,16 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-4 px-2">
                   <h3 className="text-sm font-black uppercase tracking-widest text-theme flex items-center gap-2">
                     <Zap className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                    Sling Streaks
+                    {t('sling_streaks')}
                   </h3>
-                  <span className="text-[10px] font-bold text-purple-400 bg-purple-400/10 px-2 py-1 rounded-lg">LIVE</span>
+                  <span className="text-[10px] font-bold text-purple-400 bg-purple-400/10 px-2 py-1 rounded-lg">{t('live')}</span>
                 </div>
                 <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide px-2">
                   {[
-                    { name: 'Your Streak', icon: '🔥', count: '0', color: 'bg-orange-500' },
-                    { name: 'Top Fan', icon: '👑', count: 'None', color: 'bg-yellow-500' },
-                    { name: 'Total Slings', icon: '🚀', count: messages.length, color: 'bg-purple-500' },
-                    { name: 'Global Rank', icon: '🌍', count: '#99+', color: 'bg-blue-500' }
+                    { name: t('your_streak'), icon: '🔥', count: '0', color: 'bg-orange-500' },
+                    { name: t('top_fan'), icon: '👑', count: 'None', color: 'bg-yellow-500' },
+                    { name: t('total_slings'), icon: '🚀', count: messages.length, color: 'bg-purple-500' },
+                    { name: t('global_rank'), icon: '🌍', count: '#99+', color: 'bg-blue-500' }
                   ].map((item, i) => (
                     <motion.div 
                       key={i}
@@ -1417,6 +1625,83 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Top Admirers Section */}
+              <div className="mb-12">
+                <div className="flex items-center justify-between mb-6 px-2">
+                  <div className="flex items-center gap-3 text-sm font-black uppercase tracking-[0.2em] text-theme">
+                    <div className="w-8 h-8 bg-pink-500/20 rounded-lg flex items-center justify-center">
+                      <Heart className="w-4 h-4 text-pink-500" />
+                    </div>
+                    {t('top_admirers')}
+                  </div>
+                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">{t('rank_by_activity')}</div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  {(topAdmirers.length > 0 ? topAdmirers : [
+                    { username: '???', count: 0 },
+                    { username: '???', count: 0 },
+                    { username: '???', count: 0 }
+                  ]).map((admirer, idx) => {
+                    const isRevealed = revealedAdmirers.includes(admirer.username);
+                    return (
+                      <motion.div 
+                        key={`${admirer.username}-${idx}`}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        className="glass p-5 rounded-[2rem] flex items-center justify-between group hover:border-purple-500/30 transition-all border border-white/5"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <div className="w-14 h-14 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl flex items-center justify-center border border-white/5 overflow-hidden">
+                              {isRevealed && admirer.photoURL ? (
+                                <img src={admirer.photoURL} alt="Admirer" className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-xl font-black text-purple-400">#{idx + 1}</span>
+                              )}
+                            </div>
+                            <div className="absolute -top-2 -right-2 w-6 h-6 bg-theme border-2 border-theme rounded-full flex items-center justify-center shadow-lg">
+                              <span className="text-[10px] font-black text-purple-500">{idx + 1}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-black text-theme tracking-tight uppercase">
+                              {isRevealed ? `@${admirer.username}` : `Hidden Admirer #${idx + 1}`}
+                            </h4>
+                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                              {isRevealed ? t('revealed_identity') : t('identity_locked')}
+                            </p>
+                          </div>
+                        </div>
+
+                        {isRevealed ? (
+                          <div className="flex items-center gap-2 text-green-500 bg-green-500/10 px-4 py-2 rounded-xl border border-green-500/20 shadow-lg shadow-green-500/5">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">{t('revealed')}</span>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => handleRevealAdmirer(admirer.username)}
+                            className="bg-purple-600 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-600/20 active:scale-95 flex items-center gap-2"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            {t('reveal_initial')}
+                          </button>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </div>
+                {topAdmirers.length === 0 && (
+                  <div className="mt-6 p-6 bg-white/5 border border-dashed border-white/10 rounded-[2rem] text-center">
+                    <p className="text-xs text-gray-400 font-medium">
+                      {t('no_admirers_yet')}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Conversations Section */}
               <div className="flex items-center justify-between mb-6 px-2">
                 <h3 className="text-xl font-bold flex items-center gap-2 text-theme">
@@ -1431,7 +1716,7 @@ export default function Dashboard() {
               {loading && conversations.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                   <div className="w-12 h-12 border-4 border-white/10 border-t-purple-500 rounded-full animate-spin" />
-                  <p className="text-gray-500 text-sm animate-pulse">Checking for conversations...</p>
+                  <p className="text-gray-500 text-sm animate-pulse">{t('loading_conversations')}</p>
                 </div>
               ) : conversations.length === 0 ? (
                 <motion.div 
@@ -1517,7 +1802,7 @@ export default function Dashboard() {
               <div className="glass p-8 rounded-[2.5rem]">
                 <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                   <Search className="w-5 h-5 text-purple-400" />
-                  Search Users
+                  {t('search_users')}
                 </h3>
                 
                 <div className="relative mb-8">
@@ -1586,9 +1871,9 @@ export default function Dashboard() {
                     <Sparkles className="w-6 h-6 text-purple-400" />
                   </div>
                   <div>
-                    <h4 className="font-bold mb-1">Quick Tip</h4>
+                    <h4 className="font-bold mb-1">{t('quick_tip')}</h4>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      You can send anonymous messages to anyone on Sling. Just search their username and tap "Send Message"!
+                      {t('quick_tip_desc')}
                     </p>
                   </div>
                 </div>
@@ -1600,13 +1885,13 @@ export default function Dashboard() {
 
       {/* Floating Action Button for Mobile */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 md:hidden">
-        <button 
-          onClick={copyLink}
-          className="gradient-bg text-white px-8 py-4 rounded-full font-black shadow-2xl shadow-purple-500/40 flex items-center gap-3 active:scale-95 transition-all uppercase tracking-tight text-sm"
-        >
-          {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-          {copied ? t('copied') : 'Copy My Link'}
-        </button>
+          <button 
+            onClick={copyLink}
+            className="gradient-bg text-white px-8 py-4 rounded-full font-black shadow-2xl shadow-purple-500/40 flex items-center gap-3 active:scale-95 transition-all uppercase tracking-tight text-sm"
+          >
+            {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+            {copied ? t('copied') : t('copy_my_link')}
+          </button>
       </div>
 
       {/* Share Modal */}
@@ -1642,7 +1927,7 @@ export default function Dashboard() {
                     "{selectedMessage.text}"
                   </p>
                   <div className="pt-6 border-t border-white/10">
-                    <p className="text-sm font-bold text-white/60">Send me anonymous messages!</p>
+                    <p className="text-sm font-bold text-white/60">{t('anonymous_placeholder')}</p>
                     <p className="text-lg font-black text-white mt-1 uppercase tracking-tighter">
                       {window.location.origin.replace(/^https?:\/\//, '')}/{username}
                     </p>
@@ -1654,10 +1939,10 @@ export default function Dashboard() {
                     onClick={() => setBlurMessage(!blurMessage)}
                     className="text-white/60 text-xs font-bold uppercase tracking-widest hover:text-white transition-colors"
                   >
-                    {blurMessage ? "Unblur Message" : "Blur Message"}
+                    {blurMessage ? t('unblur_message') : t('blur_message')}
                   </button>
                   <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">
-                    Screenshot & Post to Story
+                    {t('screenshot_post')}
                   </div>
                 </div>
               </div>
@@ -1666,7 +1951,7 @@ export default function Dashboard() {
                 onClick={() => setSelectedMessage(null)}
                 className="w-full mt-6 py-4 text-gray-400 font-bold hover:text-white transition-colors"
               >
-                Close
+                {t('close_button' as any) || 'Close'}
               </button>
             </motion.div>
           </motion.div>
@@ -1679,7 +1964,7 @@ export default function Dashboard() {
         onTestNotification={() => {
           const testMsg: Message = {
             id: 'test',
-            text: 'This is a test Sling message! It looks just like an SMS. 🤫',
+            text: t('test_notification_body'),
             createdAt: new Date(),
             recipientUid: user?.uid || '',
             senderName: 'Sling Bot',
@@ -1687,7 +1972,7 @@ export default function Dashboard() {
           };
           setShowNotification(testMsg);
           playNotificationSound();
-          showWebNotification('Sling: Test Message! 🤫', testMsg.text);
+          showWebNotification(t('test_notification_title'), testMsg.text);
           setShowHelp(false);
         }}
       />
@@ -1707,9 +1992,9 @@ export default function Dashboard() {
           <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center text-amber-500 mb-6 shadow-[0_0_50px_rgba(245,158,11,0.2)] border border-amber-500/50">
             <Sparkles className="w-10 h-10 animate-pulse" />
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">Revealing Sender Hint...</h3>
+          <h3 className="text-xl font-bold text-white mb-2">{t('revealing_hint')}</h3>
           <p className="text-gray-400 text-sm max-w-xs mb-8">
-            Stay on this screen for 10 seconds to reveal the location and device of this sender!
+            {t('reveal_hint_desc')}
           </p>
           
           <div className="relative w-16 h-16 flex items-center justify-center mb-8">
@@ -1745,7 +2030,7 @@ export default function Dashboard() {
             }}
             className="text-gray-500 hover:text-white transition-colors text-sm font-bold border border-white/10 px-6 py-2 rounded-full"
           >
-            Cancel
+            {t('cancel')}
           </button>
         </motion.div>
       )}
@@ -1770,7 +2055,7 @@ export default function Dashboard() {
             >
               <div className="p-8">
                 <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-xl font-bold text-white">Share Profile</h3>
+                  <h3 className="text-xl font-bold text-white">{t('share_profile_title')}</h3>
                   <button 
                     onClick={() => setShowShareMenu(false)}
                     className="p-2 text-gray-500 hover:text-white transition-colors"
@@ -1943,7 +2228,7 @@ export default function Dashboard() {
                     className="flex-2 gradient-bg py-4 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {savingUrl ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    Save Link
+                    {t('save_link')}
                   </button>
                 </div>
               </div>
@@ -1969,9 +2254,9 @@ export default function Dashboard() {
               <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <UserX className="w-8 h-8 text-red-500" />
               </div>
-              <h3 className="text-xl font-bold text-center text-theme mb-2">Delete Account?</h3>
+              <h3 className="text-xl font-bold text-center text-theme mb-2">{t('delete_account_title')}</h3>
               <p className="text-sm text-gray-400 text-center mb-8">
-                This will permanently delete your profile, username, and all received messages. This action cannot be undone.
+                {t('delete_account_msg')}
               </p>
 
               <div className="flex gap-3">
@@ -1979,7 +2264,7 @@ export default function Dashboard() {
                   onClick={() => setShowDeleteAccount(false)}
                   className="flex-1 py-4 rounded-xl font-bold text-gray-500 hover:text-white transition-colors"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button 
                   onClick={handleDeleteAccount}
@@ -1987,7 +2272,7 @@ export default function Dashboard() {
                   className="flex-2 bg-red-500 py-4 rounded-xl font-bold text-white shadow-xl shadow-red-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {deletingAccount ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  Delete Everything
+                  {t('delete_everything')}
                 </button>
               </div>
             </motion.div>
@@ -2011,7 +2296,7 @@ export default function Dashboard() {
             >
               <div className="absolute top-0 right-0 p-4">
                 <div className="text-[10px] font-black text-white/20 uppercase tracking-widest">
-                  Step {wizardStep} / 3
+                  {t('step')} {wizardStep} / 3
                 </div>
               </div>
 
@@ -2020,9 +2305,9 @@ export default function Dashboard() {
                   <div className="w-16 h-16 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 mb-6">
                     <Bell className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Enable Notifications</h3>
+                  <h3 className="text-xl font-bold text-white mb-2">{t('enable_notifications_wizard')}</h3>
                   <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-                    Get instant SMS-style alerts when someone sends you a message. You won't miss a single Sling!
+                    {t('enable_notifications_wizard_msg')}
                   </p>
                   <button 
                     onClick={async () => {
@@ -2031,13 +2316,13 @@ export default function Dashboard() {
                     }}
                     className="w-full gradient-bg text-white py-4 rounded-xl font-bold shadow-lg shadow-purple-500/20 active:scale-95 transition-all"
                   >
-                    Allow Notifications
+                    {t('allow_notifications')}
                   </button>
                   <button 
                     onClick={() => setWizardStep(2)}
                     className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest hover:text-white transition-colors"
                   >
-                    Later
+                    {t('later')}
                   </button>
                 </div>
               )}
@@ -2047,21 +2332,21 @@ export default function Dashboard() {
                   <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center text-amber-400 mb-6">
                     <MapPin className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Location Access</h3>
+                  <h3 className="text-xl font-bold text-white mb-2">{t('location_access')}</h3>
                   <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-                    We use your location to provide "Hints" to others. It makes the game much more exciting!
+                    {t('location_access_msg')}
                   </p>
                   <button 
                     onClick={requestGeolocation}
                     className="w-full gradient-bg text-white py-4 rounded-xl font-bold shadow-lg shadow-purple-500/20 active:scale-95 transition-all"
                   >
-                    Enable Location
+                    {t('enable_location')}
                   </button>
                   <button 
                     onClick={() => setWizardStep(3)}
                     className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest hover:text-white transition-colors"
                   >
-                    Later
+                    {t('later')}
                   </button>
                 </div>
               )}
@@ -2071,21 +2356,21 @@ export default function Dashboard() {
                   <div className="w-16 h-16 bg-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400 mb-6">
                     <ImageIcon className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Storage & Photos</h3>
+                  <h3 className="text-xl font-bold text-white mb-2">{t('storage_photos')}</h3>
                   <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-                    To upload profile pictures and share stories, we need access to your photos.
+                    {t('storage_photos_msg')}
                   </p>
                   <button 
                     onClick={completeOnboarding}
                     className="w-full gradient-bg text-white py-4 rounded-xl font-bold shadow-lg shadow-purple-500/20 active:scale-95 transition-all"
                   >
-                    Allow Photo Access
+                    {t('allow_photo_access')}
                   </button>
                   <button 
                     onClick={completeOnboarding}
                     className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest hover:text-white transition-colors"
                   >
-                    Finish Setup
+                    {t('finish_setup')}
                   </button>
                 </div>
               )}

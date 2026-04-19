@@ -105,11 +105,11 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
   render() {
     if (this.state.hasError) {
-      let errorMessage = 'Something went wrong. Please refresh the page.';
+      let errorMessage = 'something_went_wrong';
       try {
         const errorInfo = JSON.parse(this.state.error.message);
         if (errorInfo.error.includes('insufficient permissions')) {
-          errorMessage = 'Access denied. This might happen if you are trying to view private data or if your session has expired. Please try refreshing or logging in again.';
+          errorMessage = 'access_denied';
         }
       } catch (e) {
         // Not a JSON error
@@ -120,14 +120,14 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           <div className="w-20 h-20 bg-red-500/20 rounded-2xl flex items-center justify-center mb-6">
             <div className="w-10 h-10 text-red-500 text-2xl flex items-center justify-center">⚠️</div>
           </div>
-          <h2 className="text-2xl font-bold text-theme mb-2">Oops! Something went wrong</h2>
-          <p className="text-gray-400 mb-8 max-w-md">{errorMessage}</p>
+          <h2 className="text-2xl font-bold text-theme mb-2">{translations[localStorage.getItem('sling_language') as Language || 'en'].oops}</h2>
+          <p className="text-gray-400 mb-8 max-w-md">{translations[localStorage.getItem('sling_language') as Language || 'en'][errorMessage as any] || errorMessage}</p>
           <div className="flex flex-col gap-4 w-full max-w-xs mx-auto">
             <button 
               onClick={() => window.location.reload()}
               className="gradient-bg px-8 py-3 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20"
             >
-              Refresh Page
+              {translations[localStorage.getItem('sling_language') as Language || 'en'].try_again}
             </button>
             <button 
               onClick={() => {
@@ -138,7 +138,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
               className="text-gray-500 text-sm font-bold hover:text-gray-300 flex items-center justify-center gap-2"
             >
               <LogOut className="w-4 h-4" />
-              Sign Out & Reset
+              {translations[localStorage.getItem('sling_language') as Language || 'en'].sign_out_reset}
             </button>
           </div>
         </div>
@@ -209,6 +209,7 @@ export default function App() {
   const isAPK = window.navigator.userAgent.toLowerCase().includes('wv') || (window as any).Android;
 
   const AdaptiveBanner = () => {
+    const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
     const [isVisible, setIsVisible] = useState(() => {
       const closedAt = localStorage.getItem('sling_banner_closed');
       if (!closedAt) return true;
@@ -216,7 +217,7 @@ export default function App() {
       return Date.now() - parseInt(closedAt) > 30 * 60 * 1000;
     });
 
-    if (!isVisible) return null;
+    if (!isVisible || isAuthPage) return null;
 
     const handleClose = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -248,8 +249,8 @@ export default function App() {
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Premium Content</span>
-                <span className="text-xs font-bold text-theme">Unlock extra features & hints</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">{t('premium_content')}</span>
+                <span className="text-xs font-bold text-theme">{t('unlock_extra')}</span>
               </div>
             </div>
 
@@ -257,7 +258,7 @@ export default function App() {
               onClick={() => openMonetagLink()}
               className="relative z-10 gradient-bg text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-tighter hover:scale-105 active:scale-95 transition-all shadow-lg shadow-purple-500/20"
             >
-              Get Premium
+              {t('get_premium')}
             </button>
           </motion.div>
         </div>
@@ -544,9 +545,9 @@ export default function App() {
               }}
               className="bg-white/5 border border-white/10 px-6 py-3 rounded-xl text-purple-400 text-xs uppercase tracking-widest hover:bg-white/10 transition-all font-bold"
             >
-              Force Start App
+              {t('force_start')}
             </button>
-            <p className="text-[9px] text-gray-700 uppercase tracking-tighter">Click if stuck for more than 5 seconds</p>
+            <p className="text-[9px] text-gray-700 uppercase tracking-tighter">{t('stuck_msg')}</p>
           </motion.div>
         )}
       </div>
@@ -559,14 +560,14 @@ export default function App() {
         <div className="w-20 h-20 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-6">
           <div className="w-10 h-10 text-amber-500 text-2xl flex items-center justify-center">⏳</div>
         </div>
-        <h2 className="text-2xl font-bold text-theme mb-2">Connection Timeout</h2>
+        <h2 className="text-2xl font-bold text-theme mb-2">{t('connection_timeout')}</h2>
         <p className="text-gray-400 mb-8 max-w-md whitespace-pre-wrap">{loadError}</p>
         <div className="flex flex-col gap-4 w-full max-w-xs mx-auto">
           <button 
             onClick={() => window.location.reload()}
             className="gradient-bg px-8 py-3 rounded-xl font-bold text-white shadow-xl shadow-purple-500/20"
           >
-            Try Again
+            {t('try_again')}
           </button>
           <button 
             onClick={() => {
@@ -576,7 +577,7 @@ export default function App() {
             className="text-gray-500 text-sm font-bold hover:text-gray-300 flex items-center justify-center gap-2"
           >
             <LogOut className="w-4 h-4" />
-            Sign Out & Reset
+            {t('sign_out_reset')}
           </button>
         </div>
       </div>
@@ -598,14 +599,14 @@ export default function App() {
           <div className="w-20 h-20 bg-purple-500/20 rounded-2xl flex items-center justify-center mb-6 mx-auto">
             <Mail className="w-10 h-10 text-purple-500" />
           </div>
-          <h2 className="text-2xl font-bold text-theme mb-2">Verify your email</h2>
+          <h2 className="text-2xl font-bold text-theme mb-2">{t('verify_email')}</h2>
           <p className="text-gray-400 mb-8">
-            We've sent a verification link to <span className="text-white font-medium">{user.email}</span>. 
-            Please check your inbox and click the link to activate your account.
+            {t('verification_sent')} <span className="text-white font-medium">{user.email}</span>. 
+            {t('check_inbox_activate')}
             <br/><br/>
-            <span className="text-purple-400 font-bold text-xs uppercase tracking-widest">⚠️ Check your spam folder!</span>
+            <span className="text-purple-400 font-bold text-xs uppercase tracking-widest">⚠️ {t('check_spam')}</span>
             <br/>
-            <span className="text-[10px] text-gray-500">Sometimes verification emails are filtered as spam.</span>
+            <span className="text-[10px] text-gray-500">{t('spam_filtered')}</span>
           </p>
           
           <div className="space-y-4">
@@ -623,11 +624,11 @@ export default function App() {
                     await fetchUserProfile(updatedUser);
                   } else {
                     // Still not verified
-                    setVerificationError("Email not verified yet. Please check your inbox and click the link.");
+                    setVerificationError(t('not_verified_error' as any) || "Email not verified yet.");
                   }
                 } catch (err: any) {
                   console.error('Verification check error:', err);
-                  setVerificationError("Failed to check status. Please try again or refresh the page.");
+                  setVerificationError(t('error'));
                 } finally {
                   setIsVerifying(false);
                 }
@@ -640,7 +641,7 @@ export default function App() {
               ) : (
                 <CheckCircle className="w-4 h-4" />
               )}
-              {isVerifying ? "Checking..." : "I've verified my email"}
+              {isVerifying ? t('checking') : t('verified_button')}
             </button>
             
             {verificationError && (
@@ -649,7 +650,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
                   "text-xs font-medium",
-                  verificationError.includes("resent") ? "text-green-500" : "text-red-500"
+                  verificationError.includes("resent") || verificationError.includes("enviado") || verificationError.includes("അയച്ചു") ? "text-green-500" : "text-red-500"
                 )}
               >
                 {verificationError}
@@ -661,15 +662,15 @@ export default function App() {
                 setVerificationError(null);
                 try {
                   await sendEmailVerification(user);
-                  setVerificationError("Verification email resent! Please check your inbox.");
+                  setVerificationError(t('resent_success'));
                 } catch (err: any) {
                   console.error('Resend error:', err.message);
-                  setVerificationError("Too many requests. Please wait a moment before resending.");
+                  setVerificationError(t('too_many_requests'));
                 }
               }}
               className="w-full bg-white/5 py-4 rounded-xl font-bold text-gray-400 hover:text-white transition-colors"
             >
-              Resend Email
+              {t('resend_email')}
             </button>
             
             <button 
@@ -677,7 +678,7 @@ export default function App() {
               className="w-full flex items-center justify-center gap-2 text-gray-600 text-sm hover:text-gray-400 transition-colors pt-4"
             >
               <LogOut className="w-4 h-4" />
-              Logout and try another account
+              {t('logout_another')}
             </button>
 
             <div className="pt-6 border-t border-white/5 mt-6">
@@ -686,7 +687,7 @@ export default function App() {
                   className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px] mx-auto"
                 >
                   <Sparkles className="w-4 h-4" />
-                  How to use & Features
+                  {t('how_to_use_features')}
                 </button>
             </div>
           </div>

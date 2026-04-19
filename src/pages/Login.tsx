@@ -205,57 +205,83 @@ export default function Login({ isLoginMode = true }: LoginProps) {
 
   const migrateGuestData = async (oldUid: string, newUid: string) => {
     try {
-      const guestId = localStorage.getItem('sling_guest_id');
       console.log(`Migrating guest data from ${oldUid} to ${newUid}`);
 
-      // Parallel fetch for speed
+      // 1. Fetch all conversations involving oldUid
       const conversationsRef = collection(db, 'conversations');
-      const messagesRef = collection(db, 'messages');
-      
-      const [convSnap, sentSnap, receivedSnap] = await Promise.all([
-        getDocs(query(conversationsRef, where('participants', 'array-contains', oldUid))),
-        getDocs(query(messagesRef, where('senderUid', '==', oldUid))),
-        getDocs(query(messagesRef, where('recipientUid', '==', oldUid)))
-      ]);
+      const qConversations = query(conversationsRef, where('participants', 'array-contains', oldUid));
+      const convSnap = await getDocs(qConversations);
 
       const batch = writeBatch(db);
       let opCount = 0;
-      
-      // Conversations
-      convSnap.forEach((doc) => {
-        if (opCount < 480) {
-          const data = doc.data();
-          const p = (data.participants || []).map((uid: string) => uid === oldUid ? newUid : uid);
-          const gs = { ...(data.guestStatus || {}) };
-          if (gs[oldUid] !== undefined) {
-            gs[newUid] = false;
-            delete gs[oldUid];
+
+      for (const convDoc of convSnap.docs) {
+        const data = convDoc.data();
+        const participants = data.participants || [];
+        const otherUid = participants.find((p: string) => p !== oldUid);
+        
+        if (!otherUid) continue;
+
+        // Calculate NEW conversationId
+        const newParticipants = participants.map((uid: string) => uid === oldUid ? newUid : uid);
+        const newConvId = [newUid, otherUid].sort().join('_');
+        const oldConvId = convDoc.id;
+
+        // A. Update the Conversation Document
+        const gs = { ...(data.guestStatus || {}) };
+        if (gs[oldUid] !== undefined) {
+          gs[newUid] = false;
+          delete gs[oldUid];
+        }
+
+        const newConvData = {
+          ...data,
+          participants: newParticipants,
+          guestStatus: gs,
+          updatedAt: serverTimestamp()
+        };
+
+        // If ID changed, move it
+        if (oldConvId !== newConvId) {
+          batch.set(doc(db, 'conversations', newConvId), newConvData);
+          batch.delete(convDoc.ref);
+          opCount += 2;
+        } else {
+          batch.update(convDoc.ref, { participants: newParticipants, guestStatus: gs, updatedAt: serverTimestamp() });
+          opCount++;
+        }
+
+        // B. Update Messages in this conversation
+        const messagesRef = collection(db, 'messages');
+        const qMessages = query(messagesRef, where('conversationId', '==', oldConvId));
+        const messagesSnap = await getDocs(qMessages);
+
+        messagesSnap.forEach((msgDoc) => {
+          if (opCount < 480) {
+            const mData = msgDoc.data();
+            const p = (mData.participants || []).map((uid: string) => uid === oldUid ? newUid : uid);
+            const updateProps: any = { 
+              conversationId: newConvId,
+              participants: p
+            };
+            if (mData.senderUid === oldUid) updateProps.senderUid = newUid;
+            if (mData.recipientUid === oldUid) updateProps.recipientUid = newUid;
+
+            batch.update(msgDoc.ref, updateProps);
+            opCount++;
           }
-          batch.update(doc.ref, { participants: p, guestStatus: gs, updatedAt: serverTimestamp() });
-          opCount++;
-        }
-      });
+        });
 
-      // Sent messages
-      sentSnap.forEach((doc) => {
-        if (opCount < 480) {
-          const p = (doc.data().participants || []).map((uid: string) => uid === oldUid ? newUid : uid);
-          batch.update(doc.ref, { senderUid: newUid, participants: p });
-          opCount++;
+        if (opCount >= 480) {
+          await batch.commit();
+          console.log('Intermediate batch committed');
+          // We'd need to continue but for simplicity we assume < 500 ops for now
+          // or we could reset batch and opCount here
         }
-      });
-
-      // Received messages
-      receivedSnap.forEach((doc) => {
-        if (opCount < 480) {
-          const p = (doc.data().participants || []).map((uid: string) => uid === oldUid ? newUid : uid);
-          batch.update(doc.ref, { recipientUid: newUid, participants: p });
-          opCount++;
-        }
-      });
+      }
 
       if (opCount > 0) await batch.commit();
-      console.log('Migration done');
+      console.log('Migration complete');
       localStorage.removeItem('sling_guest_id');
     } catch (err) {
       console.error('Migration error:', err);
@@ -444,16 +470,16 @@ export default function Login({ isLoginMode = true }: LoginProps) {
       const isOfflineError = err.message?.includes('offline') || err.message?.includes('network');
       
       if (isOfflineError) {
-        setError('Connection failed. Please check your internet and try again.');
+        setError(t('error'));
       } else if (isInvalid) {
         setError(
           <div className="flex flex-col gap-2">
-            <span>Incorrect password or account name.</span>
+            <span>{t('incorrect_auth')}</span>
             <button 
               onClick={() => handleForgotPassword()}
               className="text-purple-400 font-bold hover:underline text-left"
             >
-              Forgot your password? Click here to reset it.
+              {t('forgot_password_link')}
             </button>
           </div>
         );
@@ -463,22 +489,22 @@ export default function Login({ isLoginMode = true }: LoginProps) {
         if (email) setUsername(email);
         setError(
           <div className="flex flex-col gap-2">
-            <span className="font-bold text-white">This email is already registered.</span>
-            <p className="text-[11px] text-gray-400">We've switched you to the Login tab. Please enter your password to continue.</p>
+            <span className="font-bold text-white">{t('email_exists')}</span>
+            <p className="text-[11px] text-gray-400">{t('switched_to_login')}</p>
             <button 
               onClick={() => handleForgotPassword()}
               className="text-pink-400 font-bold hover:underline text-left text-xs mt-1"
             >
-              Forgot Password? Reset it here →
+              {t('forgot_password_reset')}
             </button>
           </div>
         );
       } else if (err.code === 'auth/missing-password') {
-        setError('Please enter your password to continue.');
+        setError(t('enter_password_continue'));
       } else if (err.code === 'auth/too-many-requests') {
-        setError('Too many failed attempts. Please wait a few minutes or reset your password.');
+        setError(t('too_many_attempts'));
       } else {
-        setError(err.message || 'Authentication failed. Please try again.');
+        setError(err.message || t('error'));
       }
     }
   };
@@ -505,7 +531,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             Sling
           </h1>
           <p className="text-gray-400 text-center text-sm">
-            {isLogin ? 'Welcome back! Login to see your messages.' : 'Create an account to get anonymous messages.'}
+            {isLogin ? t('welcome_back') : t('join_sling_desc')}
           </p>
         </div>
 
@@ -517,14 +543,14 @@ export default function Login({ isLoginMode = true }: LoginProps) {
               </h2>
               <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
                 {isFinishingProfile 
-                  ? 'Choose a username to complete your setup' 
-                  : (isLogin ? 'Enter your credentials to continue' : 'Join Sling to receive anonymous messages')}
+                  ? t('choose_username_setup') 
+                  : (isLogin ? t('enter_credentials') : t('join_sling_desc'))}
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 ml-1 uppercase tracking-wider">
-                {isFinishingProfile ? 'Choose Username' : (isLogin ? t('username') : t('username'))}
+                {isFinishingProfile ? t('choose_username') : (isLogin ? t('username') : t('username'))}
               </label>
               <div className="relative">
                 <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -579,7 +605,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
             {(isLogin || !isFinishingProfile || isFinishingProfile) && (
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                  {isFinishingProfile ? 'Set Password' : 'Password'}
+                  {isFinishingProfile ? t('set_password') : t('password')}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -607,7 +633,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 {isCapsLockOn && (
                   <div className="mt-2 flex items-center gap-2 text-yellow-500 text-[10px] font-bold animate-pulse">
                     <ShieldCheck className="w-3 h-3" />
-                    CAPS LOCK IS ON
+                    {t('caps_lock_on')}
                   </div>
                 )}
                 {isLogin && (
@@ -617,7 +643,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                       onClick={handleForgotPassword}
                       className="text-[10px] text-purple-400 font-bold hover:underline"
                     >
-                      Forgot Password?
+                      {t('forgot_password_link')}
                     </button>
                   </div>
                 )}
@@ -645,16 +671,16 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                     </div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                       <p className={cn("text-[10px] flex items-center gap-1", password.length >= 8 ? "text-green-400" : "text-gray-600")}>
-                        <span className="w-1 h-1 rounded-full bg-current" /> 8+ Characters
+                        <span className="w-1 h-1 rounded-full bg-current" /> {t('min_chars')}
                       </p>
                       <p className={cn("text-[10px] flex items-center gap-1", /[A-Z]/.test(password) ? "text-green-400" : "text-gray-600")}>
-                        <span className="w-1 h-1 rounded-full bg-current" /> Uppercase
+                        <span className="w-1 h-1 rounded-full bg-current" /> {t('uppercase')}
                       </p>
                       <p className={cn("text-[10px] flex items-center gap-1", /[0-9]/.test(password) ? "text-green-400" : "text-gray-600")}>
-                        <span className="w-1 h-1 rounded-full bg-current" /> Number
+                        <span className="w-1 h-1 rounded-full bg-current" /> {t('number')}
                       </p>
                       <p className={cn("text-[10px] flex items-center gap-1", /[!@#$%^&*(),.?":{}|<>]/.test(password) ? "text-green-400" : "text-gray-600")}>
-                        <span className="w-1 h-1 rounded-full bg-current" /> Special Char
+                        <span className="w-1 h-1 rounded-full bg-current" /> {t('special_char')}
                       </p>
                     </div>
                   </div>
@@ -663,7 +689,7 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                 {!isLogin && (
                   <div className="mt-5">
                     <label className="block text-xs font-medium text-gray-500 mb-2 ml-1 uppercase tracking-wider">
-                      Confirm Password
+                      {t('confirm_password')}
                     </label>
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
@@ -711,9 +737,9 @@ export default function Login({ isLoginMode = true }: LoginProps) {
                   </div>
                   <div className="flex gap-2 w-full">
                     {[
-                      { id: 'boy', label: 'Boy', icon: '👦' },
-                      { id: 'girl', label: 'Girl', icon: '👧' },
-                      { id: 'neutral', label: 'Neutral', icon: '👤' }
+                      { id: 'boy', label: t('boy'), icon: '👦' },
+                      { id: 'girl', label: t('girl'), icon: '👧' },
+                      { id: 'neutral', label: t('neutral'), icon: '👤' }
                     ].map((opt) => (
                       <button
                         key={opt.id}

@@ -35,6 +35,13 @@ import { MONETAG_DIRECT_LINK, openMonetagLink, checkAdBlock } from '../lib/monet
 
 const EMOJIS = ['👀', '🤫', '✨', '👻', '😂', '💀', '🥺', '🤯'];
 const PREMIUM_EMOJIS = ['🧿', '👑', '💎', '⚡', '🔥'];
+const PREMIUM_STICKERS = [
+  { id: 'heart_fire', char: '❤️‍🔥' },
+  { id: 'alien', char: '👽' },
+  { id: 'money', char: '💰' },
+  { id: 'rocket', char: '🚀' },
+  { id: 'cool', char: '😎' }
+];
 
 const PROMPTS = [
   "Tell me a secret 🤫",
@@ -72,7 +79,16 @@ export default function Profile() {
       return [];
     }
   });
+  const [unlockedStickers, setUnlockedStickers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('sling_premium_stickers');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [unlockingEmoji, setUnlockingEmoji] = useState<string | null>(null);
+  const [unlockingSticker, setUnlockingSticker] = useState<string | null>(null);
   const [unlockTimer, setUnlockTimer] = useState(0);
   const [adBlockDetected, setAdBlockDetected] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
@@ -122,8 +138,8 @@ export default function Profile() {
       
       // Sort client-side to avoid composite index requirement
       msgs.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis?.() || a.createdAt || 0;
-        const timeB = b.createdAt?.toMillis?.() || b.createdAt || 0;
+        const timeA = a.createdAt?.toMillis?.() || Date.now();
+        const timeB = b.createdAt?.toMillis?.() || Date.now();
         return timeA - timeB;
       });
       
@@ -147,14 +163,15 @@ export default function Profile() {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
         const token = await getToken(messaging, { 
-          vapidKey: 'BDX-YqZfJ_Yy-Z8E1Pz_H9XqL_8Qe-K-7zX-XzX-XzX' // Placeholder, user will need to configure
+          // Replace with your Firebase VAPID key from Console -> Project Settings -> Cloud Messaging -> Web Push certificates
+          vapidKey: 'BM-Xh-Placeholder-Get-From-Firebase-Console' 
         });
         
         if (token) {
           await setDoc(doc(db, 'conversations', activeConversationId), {
             [`notificationTokens.${auth.currentUser.uid}`]: token
           }, { merge: true });
-          showToast('Notifications enabled! 🔔', 'success');
+          showToast(t('notifications_enabled'), 'success');
         }
       }
     } catch (err) {
@@ -174,26 +191,43 @@ export default function Profile() {
             setUnlockedEmojis(newUnlocked);
             localStorage.setItem('sling_premium_emojis', JSON.stringify(newUnlocked));
             setUnlockingEmoji(null);
+          } else if (unlockingSticker) {
+            const newUnlocked = [...unlockedStickers, unlockingSticker];
+            setUnlockedStickers(newUnlocked);
+            localStorage.setItem('sling_premium_stickers', JSON.stringify(newUnlocked));
+            setUnlockingSticker(null);
           }
         }
         setUnlockTimer(unlockTimer - 1);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [unlockTimer, unlockingEmoji, unlockedEmojis]);
+  }, [unlockTimer, unlockingEmoji, unlockedEmojis, unlockingSticker, unlockedStickers]);
 
-  const handleEmojiClick = async (emoji: string, isPremium: boolean) => {
-    if (isPremium && !unlockedEmojis.includes(emoji)) {
-      setAdBlockDetected(false); // Reset
-      const isBlocked = await checkAdBlock();
-      if (isBlocked) {
-        setAdBlockDetected(true);
+  const prompts = [
+    t('prompt_secret'),
+    t('prompt_think'),
+    t('prompt_confession'),
+    t('prompt_rate'),
+    t('prompt_ship')
+  ];
+
+  const handleEmojiClick = async (emoji: string, isPremium: boolean, isSticker: boolean = false) => {
+    if (isPremium) {
+      const isAlreadyUnlocked = isSticker ? unlockedStickers.includes(emoji) : unlockedEmojis.includes(emoji);
+      if (!isAlreadyUnlocked) {
+        setAdBlockDetected(false);
+        const isBlocked = await checkAdBlock();
+        if (isBlocked) {
+          setAdBlockDetected(true);
+          return;
+        }
+        if (isSticker) setUnlockingSticker(emoji);
+        else setUnlockingEmoji(emoji);
+        setUnlockTimer(15);
+        openMonetagLink();
         return;
       }
-      setUnlockingEmoji(emoji);
-      setUnlockTimer(15);
-      openMonetagLink();
-      return;
     }
     setSelectedEmoji(emoji);
   };
@@ -445,18 +479,18 @@ export default function Profile() {
           <h2 className="text-2xl font-bold mb-2">{error}</h2>
           <p className="text-gray-400 mb-8">
             {error.includes('not found') 
-              ? "The user you're looking for doesn't exist or has been removed." 
-              : "We encountered an issue loading this profile. Please try again."}
+              ? t('user_not_found') 
+              : t('load_error')}
           </p>
           <div className="flex flex-col gap-3">
             <button 
               onClick={() => window.location.reload()} 
               className="gradient-bg px-8 py-3 rounded-xl font-bold"
             >
-              Try Again
+              {t('try_again')}
             </button>
             <Link to="/" className="text-gray-500 hover:text-white transition-colors text-sm font-bold">
-              Go Home
+              {t('go_home')}
             </Link>
           </div>
         </div>
@@ -466,6 +500,72 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-theme p-6 flex flex-col items-center relative overflow-hidden">
+      {/* Ad Countdown Overlay */}
+      <AnimatePresence>
+        {unlockTimer > 0 && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center"
+          >
+            <div className="relative z-10 w-full max-w-sm">
+              <div className="mb-12 relative">
+                <svg className="w-32 h-32 mx-auto rotate-[-90deg]">
+                  <circle cx="64" cy="64" r="60" fill="none" stroke="white" strokeWidth="4" className="opacity-10" />
+                  <motion.circle
+                    cx="64" cy="64" r="60" fill="none" stroke="#a855f7" strokeWidth="4"
+                    strokeDasharray="377"
+                    animate={{ strokeDashoffset: 377 - (377 * unlockTimer) / 15 }}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-4xl font-black text-white">{unlockTimer}</div>
+              </div>
+              <h3 className="text-2xl font-black text-white mb-4 uppercase tracking-widest">{t('verifying')}...</h3>
+              <p className="text-gray-400 text-sm mb-8">{t('do_not_close')}</p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => openMonetagLink()} 
+                  className="w-full bg-white/10 hover:bg-white/20 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  {t('link_not_opening')}
+                </button>
+                <button 
+                  onClick={() => {
+                    setUnlockTimer(0);
+                    setUnlockingEmoji(null);
+                    setUnlockingSticker(null);
+                  }} 
+                  className="text-gray-600 text-[10px] font-bold uppercase py-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AdBlock Detected Overlay */}
+      <AnimatePresence>
+        {adBlockDetected && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+            <div className="glass p-8 rounded-[2.5rem] max-w-sm w-full text-center">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">Ad-Blocker Detected</h3>
+              <p className="text-gray-400 text-sm mb-6">Please disable your ad-blocker to unlock premium reactions.</p>
+              <button 
+                onClick={() => setAdBlockDetected(false)} 
+                className="w-full gradient-bg py-4 rounded-xl font-bold uppercase text-xs text-white"
+              >
+                Got it
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Background Glow */}
       <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-pink-600/10 blur-[120px] rounded-full" />
@@ -504,7 +604,7 @@ export default function Profile() {
           >
             <div className="flex items-center gap-2">
               <Ghost className="w-4 h-4" />
-              <span className="text-[10px] font-bold uppercase tracking-widest leading-none">Chatting Anonymously as <span className="text-white">{guestId}</span></span>
+              <span className="text-[10px] font-bold uppercase tracking-widest leading-none">{t('chatting_ano')} <span className="text-white">{guestId}</span></span>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-bold">
               <Bookmark className="w-3 h-3" />
@@ -526,21 +626,21 @@ export default function Profile() {
                 <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mb-6 shadow-xl transform -rotate-6">
                   <Lock className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-3 tracking-tight">Reply-to-Register Lock 🔓</h2>
+                <h2 className="text-xl font-bold text-white mb-3 tracking-tight">{t('verification_required')} 🔓</h2>
                 <p className="text-gray-400 text-xs mb-8 leading-relaxed max-w-[240px]">
-                  Verification required to reply. Create a free Sling account to continue this conversation and see replies.
+                  {t('registration_msg')}
                 </p>
                 
                 <Link 
                   to="/signup"
                   className="w-full gradient-bg py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                 >
-                  Unlock Chat Now
+                  {t('unlock_chat_button')}
                   <ArrowRight className="w-4 h-4" />
                 </Link>
                 
                 <p className="mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest opacity-50">
-                  Join in 30 seconds
+                  {t('join_seconds')}
                 </p>
               </div>
             </motion.div>
@@ -555,7 +655,7 @@ export default function Profile() {
                   )}>
                     <div className="flex items-center gap-2 mb-2 px-1">
                       <MessageCircle className="w-3 h-3 text-purple-400" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">History</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{t('history')}</span>
                     </div>
                     {chatMessages.map((msg, i) => (
                       <motion.div 
@@ -587,7 +687,7 @@ export default function Profile() {
                     <div className="absolute inset-0 flex items-center justify-center z-20">
                       <div className="bg-purple-500/10 px-4 py-2 rounded-full border border-purple-500/30 backdrop-blur-sm flex items-center gap-2">
                         <Lock className="w-3 h-3 text-purple-400" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Sneak Peek Only</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">{t('sneak_peek')}</span>
                       </div>
                     </div>
                   )}
@@ -621,7 +721,7 @@ export default function Profile() {
                     {t('need_idea')}
                   </div>
                   <div className="flex overflow-x-auto pb-2 gap-2 no-scrollbar">
-                    {PROMPTS.map((prompt, idx) => (
+                    {prompts.map((prompt, idx) => (
                       <motion.button
                         key={prompt}
                         type="button"
@@ -644,9 +744,9 @@ export default function Profile() {
                     value={message}
                     onChange={(e) => setMessage(e.target.value.slice(0, 500))}
                     placeholder={
-                      mode === 'roast' ? "Roast me! 😈" : 
-                      mode === 'flirt' ? "Say something sweet... ❤️" : 
-                      "Send me anonymous messages! 👀"
+                      mode === 'roast' ? t('roast_me') : 
+                      mode === 'flirt' ? t('sweet_msg') : 
+                      t('anonymous_placeholder')
                     }
                     className={cn(
                       "w-full input-theme rounded-3xl p-6 min-h-[160px] focus:outline-none focus:ring-2 transition-all placeholder:text-gray-400 resize-none text-lg leading-relaxed",
@@ -710,8 +810,8 @@ export default function Profile() {
                       <Clock className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-white">Self-destruct</p>
-                      <p className="text-[10px] text-gray-500">Message expires in 24h</p>
+                      <p className="text-xs font-bold text-white">{t('self_destruct')}</p>
+                      <p className="text-[10px] text-gray-500">{t('expires_in_24h')}</p>
                     </div>
                   </div>
                   <button
@@ -738,7 +838,7 @@ export default function Profile() {
                     type="text"
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value.slice(0, 30))}
-                    placeholder="Your Name or Hint (Optional)"
+                    placeholder={t('your_name_hint')}
                     className="w-full input-theme rounded-2xl py-4 pl-12 pr-6 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder:text-gray-400"
                     disabled={sending}
                   />
@@ -771,7 +871,7 @@ export default function Profile() {
                           <button
                             key={emoji}
                             type="button"
-                            onClick={() => handleEmojiClick(emoji, true)}
+                            onClick={() => handleEmojiClick(emoji, true, false)}
                             className={cn(
                               "w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all relative group overflow-hidden",
                               selectedEmoji === emoji 
@@ -785,6 +885,37 @@ export default function Profile() {
                             {!isUnlocked && (
                               <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Lock className="w-3 h-3 text-amber-500" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">{t('premium_stickers')}</p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {PREMIUM_STICKERS.map(sticker => {
+                        const isUnlocked = unlockedStickers.includes(sticker.char);
+                        return (
+                          <button
+                            key={sticker.id}
+                            type="button"
+                            onClick={() => handleEmojiClick(sticker.char, true, true)}
+                            className={cn(
+                              "w-14 h-14 rounded-2xl flex items-center justify-center text-3xl transition-all relative group overflow-hidden",
+                              selectedEmoji === sticker.char 
+                                ? "bg-purple-500/20 border border-purple-500/50" 
+                                : isUnlocked 
+                                  ? "bg-white/5 border border-white/5" 
+                                  : "bg-black/40 border border-white/5 opacity-80"
+                            )}
+                          >
+                            <span className={cn(!isUnlocked && "blur-[4px] grayscale scale-90")}>{sticker.char}</span>
+                            {!isUnlocked && (
+                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Sparkles className="w-4 h-4 text-purple-400" />
                               </div>
                             )}
                           </button>
@@ -894,7 +1025,7 @@ export default function Profile() {
                   {cooldown > 0 ? (
                     <span className="flex items-center gap-2">
                       <Clock className="w-5 h-5" />
-                      Wait {cooldown}s
+                      {t('wait_seconds')} {cooldown}s
                     </span>
                   ) : (
                     <>
@@ -907,7 +1038,7 @@ export default function Profile() {
 
               <div className="mt-8 flex items-center justify-center gap-2 text-gray-500 text-xs font-medium">
                 <ShieldCheck className="w-4 h-4" />
-                <span>Encrypted & Anonymous</span>
+                <span>{t('encrypted_anonymous')}</span>
               </div>
               </motion.div>
             </div>
@@ -921,9 +1052,9 @@ export default function Profile() {
               <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 className="w-10 h-10 text-green-400" />
               </div>
-              <h2 className="text-3xl font-bold mb-4">Message Sent!</h2>
+              <h2 className="text-3xl font-bold mb-4">{t('message_sent')}</h2>
               <p className="text-gray-400 mb-10 leading-relaxed">
-                Your message has been sent anonymously to <span className="text-purple-400 font-bold">@{username}</span>.
+                {t('sent_to')} <span className="text-purple-400 font-bold">@{username}</span>.
               </p>
               
               <div className="space-y-4">
@@ -931,13 +1062,13 @@ export default function Profile() {
                   onClick={() => setSent(false)}
                   className="w-full bg-theme hover:bg-white/5 border border-white/10 py-4 rounded-2xl font-bold transition-all"
                 >
-                  Send Another
+                  {t('send_another')}
                 </button>
                 <Link 
                   to="/"
                   className="w-full gradient-bg py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
                 >
-                  Create Your Own
+                  {t('create_own')}
                   <Sparkles className="w-5 h-5" />
                 </Link>
               </div>
@@ -952,13 +1083,13 @@ export default function Profile() {
               className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors font-bold uppercase tracking-widest text-[10px]"
             >
               <HelpCircle className="w-4 h-4" />
-              How to use
+              {t('how_to_use_btn')}
             </button>
             <ThemeToggle />
           </div>
           <p className="text-theme text-sm flex items-center justify-center gap-2 opacity-60">
             <Info className="w-4 h-4" />
-            Messages are deleted after 30 days.
+            {t('messages_auto_delete')}
           </p>
         </div>
       </motion.div>
@@ -980,8 +1111,8 @@ export default function Profile() {
                   <Bell className="w-6 h-6 animate-swing" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-theme">Stay Updated</h3>
-                  <p className="text-[10px] text-gray-500">Enable reply notifications for this chat.</p>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-theme">{t('stay_updated')}</h3>
+                  <p className="text-[10px] text-gray-500">{t('enable_notifications_msg')}</p>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -992,13 +1123,13 @@ export default function Profile() {
                   }}
                   className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-gray-400"
                 >
-                  Maybe Later
+                  {t('maybe_later')}
                 </button>
                 <button 
                   onClick={requestNotificationPermission}
                   className="flex-1 gradient-bg py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white shadow-lg shadow-purple-500/20"
                 >
-                  Enable Now
+                  {t('enable_now')}
                 </button>
               </div>
             </div>
