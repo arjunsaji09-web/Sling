@@ -111,16 +111,22 @@ export default function Profile() {
     const q = query(
       collection(db, 'messages'),
       where('conversationId', '==', activeConversationId),
-      where('participants', 'array-contains', auth.currentUser.uid),
-      orderBy('createdAt', 'asc'),
-      limit(50)
+      limit(100)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      })) as any[];
+      
+      // Sort client-side to avoid composite index requirement
+      msgs.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis?.() || a.createdAt || 0;
+        const timeB = b.createdAt?.toMillis?.() || b.createdAt || 0;
+        return timeA - timeB;
+      });
+      
       setChatMessages(msgs);
     }, (err) => {
       console.error('Chat history subscription error:', err);

@@ -365,13 +365,12 @@ export default function Dashboard() {
     const q = query(
       collection(db, 'conversations'),
       where('participants', 'array-contains', user.uid),
-      orderBy('lastMessageAt', 'desc'),
-      limit(20)
+      limit(50)
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       // Process conversations in parallel
-      const convs = await Promise.all(snapshot.docs.map(async (d) => {
+      const convsRaw = await Promise.all(snapshot.docs.map(async (d) => {
         const data = d.data();
         const otherUid = data.participants.find((p: string) => p !== user.uid);
         const isGuest = data.guestStatus?.[otherUid] === true;
@@ -417,6 +416,13 @@ export default function Dashboard() {
           otherUser: otherUserInfo
         } as Conversation;
       }));
+
+      // Client-side sort to avoid index requirement
+      const convs = convsRaw.sort((a, b) => {
+        const timeA = (a as any).lastMessageAt?.toMillis?.() || (a as any).lastMessageAt || 0;
+        const timeB = (b as any).lastMessageAt?.toMillis?.() || (b as any).lastMessageAt || 0;
+        return timeB - timeA;
+      });
       
       const totalUnread = convs.reduce((acc, c) => acc + (c.unreadCount?.[user.uid] || 0), 0);
       
@@ -452,13 +458,19 @@ export default function Dashboard() {
     const q = query(
       collection(db, 'messages'),
       where('conversationId', '==', activeConversation.id),
-      where('participants', 'array-contains', user.uid),
-      orderBy('createdAt', 'asc'),
       limit(100)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      
+      // Client-side sort to avoid composite index requirement
+      msgs.sort((a, b) => {
+        const timeA = (a as any).createdAt?.toMillis?.() || (a as any).createdAt || 0;
+        const timeB = (b as any).createdAt?.toMillis?.() || (b as any).createdAt || 0;
+        return timeA - timeB;
+      });
+      
       setChatMessages(msgs);
       
       // Mark as read

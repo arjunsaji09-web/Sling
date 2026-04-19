@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React, { useState, useEffect, createContext, useContext, ErrorInfo, ReactNode } from 'react';
 import { onAuthStateChanged, User, sendEmailVerification, signOut, signInAnonymously } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import Login from './pages/Login';
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -349,6 +349,50 @@ export default function App() {
       }
     }
   };
+
+  // Global background notification listener
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', user.uid)
+    );
+
+    let isFirstRun = true;
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (isFirstRun) {
+        isFirstRun = false;
+        return;
+      }
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'modified') {
+          const data = change.doc.data();
+          const unreadCount = data.unreadCount?.[user.uid] || 0;
+
+          if (unreadCount > 0 && data.lastMessage && data.lastMessageAt) {
+            const msgTime = data.lastMessageAt?.toMillis?.() || 0;
+            if (Date.now() - msgTime < 60000) {
+              if (Notification.permission === 'granted') {
+                new Notification('New Message on Sling', {
+                  body: data.lastMessage.substring(0, 100),
+                  icon: photoURL || '/favicon.ico'
+                });
+                
+                try {
+                  const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+                  audio.play().catch(() => {});
+                } catch (e) {}
+              }
+            }
+          }
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [user, photoURL]);
 
   const refreshUser = async () => {
     if (auth.currentUser) {

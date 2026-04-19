@@ -206,60 +206,59 @@ export default function Login({ isLoginMode = true }: LoginProps) {
   const migrateGuestData = async (oldUid: string, newUid: string) => {
     try {
       const guestId = localStorage.getItem('sling_guest_id');
-      if (!guestId) return;
+      console.log(`Migrating guest data from ${oldUid} to ${newUid}`);
 
-      console.log(`Migrating guest data from ${oldUid} to ${newUid} (guestId: ${guestId})`);
-
-      // 1. Migrate Conversations
+      // Parallel fetch for speed
       const conversationsRef = collection(db, 'conversations');
-      const qConversations = query(conversationsRef, where('participants', 'array-contains', oldUid));
-      const conversationsSnap = await getDocs(qConversations);
+      const messagesRef = collection(db, 'messages');
+      
+      const [convSnap, sentSnap, receivedSnap] = await Promise.all([
+        getDocs(query(conversationsRef, where('participants', 'array-contains', oldUid))),
+        getDocs(query(messagesRef, where('senderUid', '==', oldUid))),
+        getDocs(query(messagesRef, where('recipientUid', '==', oldUid)))
+      ]);
 
       const batch = writeBatch(db);
+      let opCount = 0;
       
-      conversationsSnap.forEach((convDoc) => {
-        const data = convDoc.data();
-        const participants = data.participants || [];
-        const guestStatus = data.guestStatus || {};
-
-        // Update participants array
-        const newParticipants = participants.map((p: string) => p === oldUid ? newUid : p);
-        
-        // Update guestStatus map
-        const newGuestStatus = { ...guestStatus };
-        if (newGuestStatus[oldUid] !== undefined) {
-          newGuestStatus[newUid] = false; // Now they are a user
-          delete newGuestStatus[oldUid];
+      // Conversations
+      convSnap.forEach((doc) => {
+        if (opCount < 480) {
+          const data = doc.data();
+          const p = (data.participants || []).map((uid: string) => uid === oldUid ? newUid : uid);
+          const gs = { ...(data.guestStatus || {}) };
+          if (gs[oldUid] !== undefined) {
+            gs[newUid] = false;
+            delete gs[oldUid];
+          }
+          batch.update(doc.ref, { participants: p, guestStatus: gs, updatedAt: serverTimestamp() });
+          opCount++;
         }
-
-        batch.update(convDoc.ref, {
-          participants: newParticipants,
-          guestStatus: newGuestStatus,
-          updatedAt: serverTimestamp()
-        });
       });
 
-      // 2. Migrate Messages (sent by the guest)
-      const messagesRef = collection(db, 'messages');
-      const qMessages = query(messagesRef, where('senderUid', '==', oldUid));
-      const messagesSnap = await getDocs(qMessages);
-
-      messagesSnap.forEach((msgDoc) => {
-        const data = msgDoc.data();
-        const participants = data.participants || [];
-        const newParticipants = participants.map((p: string) => p === oldUid ? newUid : p);
-
-        batch.update(msgDoc.ref, {
-          senderUid: newUid,
-          participants: newParticipants
-        });
+      // Sent messages
+      sentSnap.forEach((doc) => {
+        if (opCount < 480) {
+          const p = (doc.data().participants || []).map((uid: string) => uid === oldUid ? newUid : uid);
+          batch.update(doc.ref, { senderUid: newUid, participants: p });
+          opCount++;
+        }
       });
 
-      await batch.commit();
-      console.log('Guest migration completed successfully');
-      localStorage.removeItem('sling_guest_id'); // Migration done
+      // Received messages
+      receivedSnap.forEach((doc) => {
+        if (opCount < 480) {
+          const p = (doc.data().participants || []).map((uid: string) => uid === oldUid ? newUid : uid);
+          batch.update(doc.ref, { recipientUid: newUid, participants: p });
+          opCount++;
+        }
+      });
+
+      if (opCount > 0) await batch.commit();
+      console.log('Migration done');
+      localStorage.removeItem('sling_guest_id');
     } catch (err) {
-      console.error('Guest migration failed:', err);
+      console.error('Migration error:', err);
     }
   };
 
